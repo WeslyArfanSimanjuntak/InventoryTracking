@@ -1,0 +1,233 @@
+﻿@*<div class="row" style="padding-bottom:20px">
+    <div class="col-md-9">
+        <div class="row">
+            
+            <div class="col-sm-2"><a href="@Url.Action("CreateHolidays","Admin")" class="btn btn-outline-primary">Holidays</a></div>
+        </div>
+    </div>
+</div>*@
+    <div class="card">
+
+        <div class="float-right" style="float:right;margin-left:85%;">
+            @Html.ActionLink("Holidays", "CreateHolidays", null, new { @class = "btn btn-outline-primary" })
+        </div>
+
+        <div class="row" style="margin-top:50px;">
+
+            <section class="col-md-12 col-md-push-0">
+                <div class="row">
+                    <div class="col-xs-9 col-xs-push-2">
+                        <div class="box box-primary">
+                            <div class="box-body no-padding">
+
+                                <!-- Head Untuk Kalender -->
+
+                                @Scripts.Render("~/bundles/modernizr")
+
+                                <!-- Font Awesome -->
+                                <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css" />
+
+                                <!-- qTip -->
+                                <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/qtip2/3.0.3/jquery.qtip.min.css" />
+
+                                <!-- Full Calendar -->
+                                <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/2.9.1/fullcalendar.min.css" />
+                                <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/2.9.1/fullcalendar.print.css" media="print" />
+
+                                <!-- Akhir dari Line Head Untuk Kalender -->
+                                <!--Tampilkan Full Calendar -->
+                                <!-- Include moment-->
+                                <script type="text/javascript" src="//cdn.jsdelivr.net/momentjs/latest/moment.min.js"></script>
+
+                                <!-- qTip -->
+                                <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/qtip2/3.0.3/jquery.qtip.min.js"></script>
+
+                                @Scripts.Render("~/bundles/jquery")
+                                @Scripts.Render("~/bundles/bootstrap")
+
+
+
+                                <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/2.9.1/fullcalendar.min.js"></script>
+
+                                <script>
+                                    $(document).ready(function () {
+                                        $('#calendar').fullCalendar({
+                                            header:
+                                            {
+                                                left: 'prev,next today',
+                                                center: 'title',
+                                                right: 'month,agendaWeek,agendaDay'
+                                            },
+                                            buttonText: {
+                                                today: 'Today',
+                                                month: '',
+                                                week: '',
+                                                day: ''
+                                            },
+
+
+                                            events: function (start, end, timezone, callback) {
+                                                $.ajax({
+                                                    url: '/Admin/CreateHolidays',
+                                                    type: "GET",
+                                                    dataType: "JSON",
+
+                                                    success: function (result) {
+                                                        var events = [];
+
+                                                        $.each(result, function (i, data) {
+                                                            events.push(
+                                                                {
+                                                                    title: data.Name,
+                                                                    description: data.Type,
+                                                                    start: moment(data.Date).format('YYYY-MM-DD'),
+                                                                    end: moment(data.Date).format('YYYY-MM-DD'),
+                                                                    backgroundColor: "#9501fc",
+                                                                    borderColor: "#fc0101"
+                                                                });
+                                                        });
+
+                                                        callback(events);
+                                                    }
+                                                });
+                                            },
+
+                                            eventRender: function (event, element) {
+                                                element.qtip(
+                                                    {
+                                                        content: event.description
+                                                    });
+                                            },
+
+                                            editable: false
+                                        });
+                                    });
+                                </script>
+
+                                <!--Akhir dari Line Tampilkan Full Calendar -->
+                                <!-- THE CALENDAR -->
+                                <div class="card" id="calendar" style="width:95%; margin-left:2%;"></div>
+                            </div><!-- /.box-body -->
+                        </div><!-- /. box -->
+                    </div><!-- /.col -->
+                </div>
+            </section>
+        </div>
+    </div>
+
+@*
+
+    <div class="card">
+
+        <h2>CobaKalenderDatabase</h2>
+        <link href="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.4.0/fullcalendar.min.css" rel="stylesheet" />
+        <link href="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.4.0/fullcalendar.print.css" rel="stylesheet" media="print" />
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.18.1/moment.min.js"></script>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/fullcalendar/3.4.0/fullcalendar.min.js"></script>
+
+        <link href="~/Content/Calender/SiteCalender.css" rel="stylesheet" type="text/css" />
+        <link href="~/Content/Calender/bootstrapCalender.min.css" rel="stylesheet" type="text/css" />
+        <script src="~/Content/Calender/modernizrCalender.2.6.2.js"></script>
+
+        <script src="~/Content/Calender/jqueryCalender-1.10.2.min.js"></script>
+        <script src="~/Content/Calender/bootstrapCalender.min.js"></script>
+
+
+        <div class="container">
+            <div class="navbar-header">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+
+            </div>
+            <div class="navbar-collapse collapse">
+                <ul class="nav navbar-nav">
+                </ul>
+            </div>
+        </div>
+
+        <div id="calender"></div>
+        <script>
+            $(document).ready(function () {
+                $(document).ready(function () {
+                    var events = [];
+                    $.ajax({
+                        type: "GET",
+                        url: "/Admin/GetEvents",
+                        success: function (data) {
+                            $.each(data, function (i, v) {
+                                events.push({
+                                    title: v.Subject,
+                                    //description: v.Description,
+                                    start: moment(v.Start),
+                                    //end: v.End != null ? moment(v.End) : null,
+                                    //color: v.ThemeColor,
+                                    allDay: v.IsFullDay
+                                });
+                            })
+
+                            GenerateCalender(events);
+                        },
+                        error: function (error) {
+                            alert('failed');
+                        }
+                    })
+
+                    function GenerateCalender(events) {
+                        $('#calender').fullCalendar('destroy');
+                        $('#calender').fullCalendar({
+                            contentHeight: 400,
+                            defaultDate: new Date(),
+                            timeFormat: 'h(:mm)a',
+                            header: {
+                                left: 'prev,next today',
+                                center: 'title',
+                                right: 'month,basicWeek,basicDay,agenda'
+                            },
+                            eventLimit: true,
+                            eventColor: '#378006',
+                            events: events,
+                            eventClick: function (calEvent, jsEvent, view) {
+                                $('#myModal #eventTitle').text(calEvent.title);
+                                var $description = $('<div/>');
+                                $description.append($('<p/>').html('<b>Start:</b>' + calEvent.start.format("DD-MMM-YYYY HH:mm a")));
+                                //if (calEvent.end != null) {
+                                //    $description.append($('<p/>').html('<b>End:</b>' + calEvent.end.format("DD-MMM-YYYY HH:mm a")));
+                                //}
+                                $description.append($('<p/>').html('<b>Description:</b>' + calEvent.description));
+                                $('#myModal #pDetails').empty().html($description);
+
+                                $('#myModal').modal();
+                            }
+                        })
+                    }
+                })
+        </script>
+
+
+        <div id="myModal" class="modal fade" role="dialog">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal">&times;</button>
+                        <h4 class="modal-title"><span id="eventTitle"></span></h4>
+                    </div>
+                    <div class="modal-body">
+                        <p id="pDetails"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+*@
+
+
+
+

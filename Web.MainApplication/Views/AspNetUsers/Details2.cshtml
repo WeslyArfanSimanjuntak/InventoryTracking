@@ -1,0 +1,35 @@
+﻿@model Repository.Application.DataModel.AspNetUsers
+
+
+<div class="card">
+    <div class="card-header with-border">
+        <h3 class="card-title">
+            <b>Details User</b>
+        </h3>
+    </div>
+    <!-- /.box-header -->
+    <div class="card-body">
+        
+            <div>
+                @Html.Label("Full Name", htmlAttributes: new { @class = "control-label col-md-4" })
+                <div class="col-md-8">
+                    @Html.DisplayFor(model => model.FullName)
+                </div>
+            </div>
+
+        
+
+        <div class="box-footer">
+            <div class="form-actions color">
+                <div class="form-group">
+                    <div class="col-md-offset-2 col-md-10">
+                        @Html.ActionLink("Back", "Index", null, new { @class = "btn btn-default" })
+                        @Html.ActionLink("Edit", "Edit", new { id = Model.Username }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+</div>

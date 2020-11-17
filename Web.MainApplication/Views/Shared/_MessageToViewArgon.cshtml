@@ -1,0 +1,103 @@
+﻿@{
+    List<string> successMessages = (List<string>)TempData["MessageSuccess1402"];
+    List<string> infoMessages = (List<string>)TempData["MessageInfo1402"];
+    List<string> warningMessages = (List<string>)TempData["MessageWarning1402"];
+    List<string> errorMessages = (List<string>)TempData["MessageError1402"];
+
+    if (successMessages != null && successMessages.Count > 0)
+    {
+        <div id="messageContainer" class="alert alert-success alert-dismissible fade show" role="alert">
+            <span class="alert-text">
+                @*<strong>Secondary!</strong>*@
+                @{
+                    foreach (var item in successMessages)
+                    {
+                        <p>
+                            @Html.Raw(item)
+                            @if (successMessages.Count > 1)
+                            {
+                                <br />
+                            }
+                        </p>
+                    }
+                }
+            </span>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+            </button>
+
+        </div>
+    }
+
+    if (infoMessages != null && infoMessages.Count > 0)
+    {
+        <div id="messageContainer" class="alert alert-info alert-dismissible fade show" role="alert">
+            <span class="alert-text">
+                @*<strong>Secondary!</strong>*@
+                @{
+                    foreach (var item in infoMessages)
+                    {
+                        <p>
+                            @Html.Raw(item)
+                            @if (infoMessages.Count > 1)
+                            {
+                                <br />
+                            }
+                        </p>
+                    }
+                }
+            </span>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+            </button>
+
+        </div>
+
+    }
+
+    if (warningMessages != null && warningMessages.Count > 0)
+    {
+        <div id="messageContainer" class="alert alert-warning alert-dismissible fade show" role="alert">
+            <span class="alert-text">
+                @{
+                    foreach (var item in warningMessages)
+                    {
+                        <p>
+                            @Html.Raw(item)
+                            @if (warningMessages.Count > 1)
+                            {
+                                <br />
+                            }
+                        </p>
+                    }
+                }
+            </span>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+            </button>
+        </div>
+    }
+
+    if (errorMessages != null && errorMessages.Count > 0)
+    {
+        <div id="messageContainer" class="alert alert-danger alert-dismissible fade show" role="alert">
+            <span class="alert-text">
+                @{
+                    foreach (var item in errorMessages)
+                    {
+                        <p>
+                            @Html.Raw(item)
+                            @if (errorMessages.Count > 1)
+                            {
+                                <br />
+                            }
+                        </p>
+                    }
+                }
+            </span>
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">×</span>
+            </button>
+        </div>
+    }
+}

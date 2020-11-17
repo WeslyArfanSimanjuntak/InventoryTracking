@@ -1,0 +1,1227 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
+  <!-- EF Runtime content -->
+  <edmx:Runtime>
+    <!-- SSDL content -->
+    <edmx:StorageModels>
+    <Schema Namespace="ISL_HEALTHModel.Store" Provider="System.Data.SqlClient" ProviderManifestToken="2012" Alias="Self" xmlns:store="http://schemas.microsoft.com/ado/2007/12/edm/EntityStoreSchemaGenerator" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+        <EntityType Name="AspNetGroups">
+          <Key>
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="GroupName" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="GroupDescription" Type="varchar" MaxLength="256" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetGroupUser">
+          <Key>
+            <PropertyRef Name="Username" />
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="Username" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="GroupName" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetLog">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="Entity" Type="varchar" MaxLength="50" />
+          <Property Name="Message" Type="varchar" MaxLength="1024" />
+        </EntityType>
+        <EntityType Name="AspNetMenu">
+          <Key>
+            <PropertyRef Name="MenuId" />
+          </Key>
+          <Property Name="MenuId" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="MenuName" Type="varchar" MaxLength="50" />
+          <Property Name="MenuParentId" Type="int" />
+          <Property Name="Sequence" Type="int" />
+          <Property Name="AspNetRoles" Type="int" />
+          <Property Name="MenuIClass" Type="varchar" MaxLength="50" />
+          <Property Name="MenuLevel" Type="int" />
+          <Property Name="ShowAsChild" Type="smallint" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetRoleGroup">
+          <Key>
+            <PropertyRef Name="RolesId" />
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="RolesId" Type="int" Nullable="false" />
+          <Property Name="GroupName" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetRoles">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="ParentId" Type="int" />
+          <Property Name="Name" Type="varchar" MaxLength="50" />
+          <Property Name="Type" Type="varchar" MaxLength="50" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetSequential">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="bigint" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="Name" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="LastSequential" Type="bigint" Nullable="false" />
+          <Property Name="Status" Type="varchar" MaxLength="50" />
+          <Property Name="Year" Type="int" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="AspNetUsers">
+          <Key>
+            <PropertyRef Name="Username" />
+          </Key>
+          <Property Name="Username" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="FullName" Type="varchar" MaxLength="50" />
+          <Property Name="Password" Type="varchar" MaxLength="256" />
+          <Property Name="Email" Type="varchar" MaxLength="128" />
+          <Property Name="LastPasswordChange" Type="datetime" />
+          <Property Name="LastLoginDate" Type="datetime" />
+          <Property Name="ErrorTried" Type="int" />
+          <Property Name="TokenRegister" Type="varchar" MaxLength="256" />
+          <Property Name="TokenForgotPassword" Type="varchar" MaxLength="256" />
+          <Property Name="IsLocked" Type="smallint" />
+          <Property Name="Remark" Type="varchar" MaxLength="512" />
+          <Property Name="User Skin" Type="varchar" MaxLength="50" />
+          <Property Name="User Notes" Type="varchar" MaxLength="2048" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="asset">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="nama" Type="varchar" MaxLength="128" />
+          <Property Name="notes" Type="varchar" MaxLength="1024" />
+          <Property Name="assetId" Type="varchar" MaxLength="128" />
+          <Property Name="serialNumber" Type="varchar" MaxLength="256" />
+          <Property Name="employeeId" Type="varchar" MaxLength="20" />
+          <Property Name="type" Type="varchar" MaxLength="128" />
+          <Property Name="remarks" Type="varchar" MaxLength="256" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <!--Errors Found During Generation:
+warning 6013: The table/view 'DB_INVENTORY_TRACKING.dbo.assetData' does not have a primary key defined and no valid primary key could be inferred. This table/view has been excluded. To use the entity, you will need to review your schema, add the correct keys, and uncomment it.
+        <EntityType Name="assetData">
+          <Property Name="Old Asset Code" Type="nvarchar" MaxLength="255" />
+          <Property Name="New Asset Code" Type="nvarchar" MaxLength="255" />
+          <Property Name="Equipment Type" Type="nvarchar" MaxLength="255" />
+          <Property Name="Equipment Name" Type="nvarchar" MaxLength="255" />
+          <Property Name="Serial Number" Type="nvarchar" MaxLength="255" />
+          <Property Name="Specification" Type="nvarchar" MaxLength="255" />
+          <Property Name="OS" Type="nvarchar" MaxLength="255" />
+          <Property Name="Comp# Name" Type="nvarchar" MaxLength="255" />
+          <Property Name="Current User" Type="nvarchar" MaxLength="255" />
+          <Property Name="Employee ID" Type="nvarchar" MaxLength="255" />
+          <Property Name="Department" Type="nvarchar" MaxLength="255" />
+          <Property Name="Location" Type="nvarchar" MaxLength="255" />
+          <Property Name="Previous User" Type="nvarchar" MaxLength="255" />
+          <Property Name="Date Received" Type="datetime" />
+          <Property Name="Waranty Periode" Type="nvarchar" MaxLength="255" />
+          <Property Name="P#O Number" Type="nvarchar" MaxLength="255" />
+          <Property Name="Vendor" Type="nvarchar" MaxLength="255" />
+          <Property Name="Accessories" Type="nvarchar" MaxLength="255" />
+          <Property Name="Price" Type="money" />
+          <Property Name="Note" Type="nvarchar" MaxLength="255" />
+          <Property Name="F21" Type="nvarchar" MaxLength="255" />
+          <Property Name="F22" Type="nvarchar" MaxLength="255" />
+        </EntityType>-->
+        <EntityType Name="assethistory">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idAsset" Type="int" Nullable="false" />
+          <Property Name="picture" Type="binary" MaxLength="1" />
+          <Property Name="dateCondition" Type="datetime" />
+          <Property Name="remark" Type="varchar" MaxLength="128" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="assetmovement">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idAsset" Type="int" />
+          <Property Name="idPlace" Type="int" />
+          <Property Name="date" Type="datetime" />
+          <Property Name="movementType" Type="int" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="Remark" Type="varchar" MaxLength="128" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="CommonListValue">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="ParentId" Type="int" />
+          <Property Name="Value" Type="varchar" MaxLength="50" />
+          <Property Name="Text" Type="varchar" MaxLength="100" />
+          <Property Name="Desc" Type="varchar" MaxLength="1024" />
+          <Property Name="Desc2" Type="varchar" MaxLength="1024" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <EntityType Name="movementtype">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="name" Type="int" />
+          <Property Name="description" Type="varchar" MaxLength="256" />
+          <Property Name="remark" Type="varchar" MaxLength="128" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <!--Errors Found During Generation:
+warning 6013: The table/view 'DB_INVENTORY_TRACKING.dbo.PC_Notebook$' does not have a primary key defined and no valid primary key could be inferred. This table/view has been excluded. To use the entity, you will need to review your schema, add the correct keys, and uncomment it.
+        <EntityType Name="PC_Notebook$">
+          <Property Name="Old Asset Code" Type="nvarchar" MaxLength="255" />
+          <Property Name="New Asset Code" Type="nvarchar" MaxLength="255" />
+          <Property Name="Equipment Type" Type="nvarchar" MaxLength="255" />
+          <Property Name="Equipment Name" Type="nvarchar" MaxLength="255" />
+          <Property Name="Serial Number" Type="nvarchar" MaxLength="255" />
+          <Property Name="Specification" Type="nvarchar" MaxLength="255" />
+          <Property Name="OS" Type="nvarchar" MaxLength="255" />
+          <Property Name="Commputer Name" Type="nvarchar" MaxLength="255" />
+          <Property Name="Current User" Type="nvarchar" MaxLength="255" />
+          <Property Name="Employee ID" Type="nvarchar" MaxLength="255" />
+          <Property Name="Department" Type="nvarchar" MaxLength="255" />
+          <Property Name="Location" Type="nvarchar" MaxLength="255" />
+          <Property Name="Previous User" Type="nvarchar" MaxLength="255" />
+          <Property Name="Date Received" Type="datetime" />
+          <Property Name="Waranty Periode" Type="nvarchar" MaxLength="255" />
+          <Property Name="P#O Number" Type="nvarchar" MaxLength="255" />
+          <Property Name="Vendor" Type="nvarchar" MaxLength="255" />
+          <Property Name="Accessories" Type="nvarchar" MaxLength="255" />
+          <Property Name="Price" Type="float" />
+          <Property Name="Note" Type="nvarchar" MaxLength="255" />
+          <Property Name="F21" Type="nvarchar" MaxLength="255" />
+          <Property Name="F22" Type="nvarchar" MaxLength="255" />
+        </EntityType>-->
+        <EntityType Name="place">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idParent" Type="int" />
+          <Property Name="code" Type="varchar" MaxLength="50" />
+          <Property Name="nama" Type="varchar" MaxLength="128" />
+          <Property Name="location" Type="varchar" MaxLength="128" />
+          <Property Name="floorLevel" Type="int" />
+          <Property Name="remark" Type="varchar" MaxLength="128" />
+          <Property Name="CreatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="CreatedDate" Type="datetime" />
+          <Property Name="UpdatedBy" Type="varchar" MaxLength="50" />
+          <Property Name="UpdatedDate" Type="datetime" />
+          <Property Name="IsActive" Type="smallint" />
+        </EntityType>
+        <Association Name="FK_AspNetGroupUser_ToGroup">
+          <End Role="AspNetGroups" Type="Self.AspNetGroups" Multiplicity="1" />
+          <End Role="AspNetGroupUser" Type="Self.AspNetGroupUser" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetGroups">
+              <PropertyRef Name="GroupName" />
+            </Principal>
+            <Dependent Role="AspNetGroupUser">
+              <PropertyRef Name="GroupName" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetGroupUser_ToUser">
+          <End Role="AspNetUsers" Type="Self.AspNetUsers" Multiplicity="1" />
+          <End Role="AspNetGroupUser" Type="Self.AspNetGroupUser" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetUsers">
+              <PropertyRef Name="Username" />
+            </Principal>
+            <Dependent Role="AspNetGroupUser">
+              <PropertyRef Name="Username" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoleGroup_ToGroup">
+          <End Role="AspNetGroups" Type="Self.AspNetGroups" Multiplicity="1" />
+          <End Role="AspNetRoleGroup" Type="Self.AspNetRoleGroup" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetGroups">
+              <PropertyRef Name="GroupName" />
+            </Principal>
+            <Dependent Role="AspNetRoleGroup">
+              <PropertyRef Name="GroupName" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoleGroup_ToRoles">
+          <End Role="AspNetRoles" Type="Self.AspNetRoles" Multiplicity="1" />
+          <End Role="AspNetRoleGroup" Type="Self.AspNetRoleGroup" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetRoleGroup">
+              <PropertyRef Name="RolesId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoles_ToAspNetRoles">
+          <End Role="AspNetRoles" Type="Self.AspNetRoles" Multiplicity="0..1" />
+          <End Role="AspNetRoles1" Type="Self.AspNetRoles" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetRoles1">
+              <PropertyRef Name="ParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETHIS_ASSETHIST_ASSET">
+          <End Role="asset" Type="Self.asset" Multiplicity="1" />
+          <End Role="assethistory" Type="Self.assethistory" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="asset">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assethistory">
+              <PropertyRef Name="idAsset" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETMOV_ASSETMOVE_ASSETHIS">
+          <End Role="asset" Type="Self.asset" Multiplicity="0..1" />
+          <End Role="assetmovement" Type="Self.assetmovement" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="asset">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assetmovement">
+              <PropertyRef Name="idAsset" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETMOV_ToPlace">
+          <End Role="place" Type="Self.place" Multiplicity="0..1" />
+          <End Role="assetmovement" Type="Self.assetmovement" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="place">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assetmovement">
+              <PropertyRef Name="idPlace" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_CommonListValue_ToCommonListValue">
+          <End Role="CommonListValue" Type="Self.CommonListValue" Multiplicity="0..1" />
+          <End Role="CommonListValue1" Type="Self.CommonListValue" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="CommonListValue">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="CommonListValue1">
+              <PropertyRef Name="ParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Menu_ToMenuAspNetRoles">
+          <End Role="AspNetRoles" Type="Self.AspNetRoles" Multiplicity="0..1" />
+          <End Role="AspNetMenu" Type="Self.AspNetMenu" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetMenu">
+              <PropertyRef Name="AspNetRoles" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Menu_ToMenuParent">
+          <End Role="AspNetMenu" Type="Self.AspNetMenu" Multiplicity="0..1" />
+          <End Role="AspNetMenu1" Type="Self.AspNetMenu" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetMenu">
+              <PropertyRef Name="MenuId" />
+            </Principal>
+            <Dependent Role="AspNetMenu1">
+              <PropertyRef Name="MenuParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_PLACE_PLACE_IBF_PLACE">
+          <End Role="place" Type="Self.place" Multiplicity="0..1" />
+          <End Role="place1" Type="Self.place" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="place">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="place1">
+              <PropertyRef Name="idParent" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <EntityContainer Name="ISL_HEALTHModelStoreContainer">
+          <EntitySet Name="AspNetGroups" EntityType="Self.AspNetGroups" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetGroupUser" EntityType="Self.AspNetGroupUser" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetLog" EntityType="Self.AspNetLog" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetMenu" EntityType="Self.AspNetMenu" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetRoleGroup" EntityType="Self.AspNetRoleGroup" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetRoles" EntityType="Self.AspNetRoles" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetSequential" EntityType="Self.AspNetSequential" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="AspNetUsers" EntityType="Self.AspNetUsers" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="asset" EntityType="Self.asset" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="assethistory" EntityType="Self.assethistory" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="assetmovement" EntityType="Self.assetmovement" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="CommonListValue" EntityType="Self.CommonListValue" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="movementtype" EntityType="Self.movementtype" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="place" EntityType="Self.place" Schema="dbo" store:Type="Tables" />
+          <AssociationSet Name="FK_AspNetGroupUser_ToGroup" Association="Self.FK_AspNetGroupUser_ToGroup">
+            <End Role="AspNetGroups" EntitySet="AspNetGroups" />
+            <End Role="AspNetGroupUser" EntitySet="AspNetGroupUser" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetGroupUser_ToUser" Association="Self.FK_AspNetGroupUser_ToUser">
+            <End Role="AspNetUsers" EntitySet="AspNetUsers" />
+            <End Role="AspNetGroupUser" EntitySet="AspNetGroupUser" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoleGroup_ToGroup" Association="Self.FK_AspNetRoleGroup_ToGroup">
+            <End Role="AspNetGroups" EntitySet="AspNetGroups" />
+            <End Role="AspNetRoleGroup" EntitySet="AspNetRoleGroup" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoleGroup_ToRoles" Association="Self.FK_AspNetRoleGroup_ToRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetRoleGroup" EntitySet="AspNetRoleGroup" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoles_ToAspNetRoles" Association="Self.FK_AspNetRoles_ToAspNetRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetRoles1" EntitySet="AspNetRoles" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETHIS_ASSETHIST_ASSET" Association="Self.FK_ASSETHIS_ASSETHIST_ASSET">
+            <End Role="asset" EntitySet="asset" />
+            <End Role="assethistory" EntitySet="assethistory" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETMOV_ASSETMOVE_ASSETHIS" Association="Self.FK_ASSETMOV_ASSETMOVE_ASSETHIS">
+            <End Role="asset" EntitySet="asset" />
+            <End Role="assetmovement" EntitySet="assetmovement" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETMOV_ToPlace" Association="Self.FK_ASSETMOV_ToPlace">
+            <End Role="place" EntitySet="place" />
+            <End Role="assetmovement" EntitySet="assetmovement" />
+          </AssociationSet>
+          <AssociationSet Name="FK_CommonListValue_ToCommonListValue" Association="Self.FK_CommonListValue_ToCommonListValue">
+            <End Role="CommonListValue" EntitySet="CommonListValue" />
+            <End Role="CommonListValue1" EntitySet="CommonListValue" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Menu_ToMenuAspNetRoles" Association="Self.FK_Menu_ToMenuAspNetRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetMenu" EntitySet="AspNetMenu" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Menu_ToMenuParent" Association="Self.FK_Menu_ToMenuParent">
+            <End Role="AspNetMenu" EntitySet="AspNetMenu" />
+            <End Role="AspNetMenu1" EntitySet="AspNetMenu" />
+          </AssociationSet>
+          <AssociationSet Name="FK_PLACE_PLACE_IBF_PLACE" Association="Self.FK_PLACE_PLACE_IBF_PLACE">
+            <End Role="place" EntitySet="place" />
+            <End Role="place1" EntitySet="place" />
+          </AssociationSet>
+        </EntityContainer>
+      </Schema></edmx:StorageModels>
+    <!-- CSDL content -->
+    <edmx:ConceptualModels>
+      <Schema Namespace="ISL_HEALTHModel" Alias="Self" annotation:UseStrongSpatialTypes="false" xmlns:annotation="http://schemas.microsoft.com/ado/2009/02/edm/annotation" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+        <EntityContainer Name="DBEntities" annotation:LazyLoadingEnabled="true">
+          <FunctionImport Name="spEmployeeBirthdayList" ReturnType="Collection(ISL_HEALTHModel.spEmployeeBirthdayList_Result)">
+          <Parameter Name="totalRecord" Mode="In" Type="Int32" />
+          </FunctionImport>
+          <FunctionImport Name="spEmployeeBirthdayListForCurrentMonth" ReturnType="Collection(ISL_HEALTHModel.spEmployeeBirthdayListForCurrentMonth_Result)">
+          <Parameter Name="month" Mode="In" Type="Int32" />
+          </FunctionImport>
+          <FunctionImport Name="spEmployeeAbsence" ReturnType="Collection(ISL_HEALTHModel.spEmployeeAbsence_Result)">
+            <Parameter Name="startDate" Mode="In" Type="DateTime" />
+            <Parameter Name="endDate" Mode="In" Type="DateTime" />
+            <Parameter Name="employeeId" Mode="In" Type="String" />
+          </FunctionImport>
+          <EntitySet Name="AspNetGroups" EntityType="ISL_HEALTHModel.AspNetGroups" />
+          <EntitySet Name="AspNetGroupUser" EntityType="ISL_HEALTHModel.AspNetGroupUser" />
+          <EntitySet Name="AspNetLog" EntityType="ISL_HEALTHModel.AspNetLog" />
+          <EntitySet Name="AspNetMenu" EntityType="ISL_HEALTHModel.AspNetMenu" />
+          <EntitySet Name="AspNetRoleGroup" EntityType="ISL_HEALTHModel.AspNetRoleGroup" />
+          <EntitySet Name="AspNetRoles" EntityType="ISL_HEALTHModel.AspNetRoles" />
+          <EntitySet Name="AspNetSequential" EntityType="ISL_HEALTHModel.AspNetSequential" />
+          <EntitySet Name="AspNetUsers" EntityType="ISL_HEALTHModel.AspNetUsers" />
+          <EntitySet Name="asset" EntityType="ISL_HEALTHModel.asset" />
+          <EntitySet Name="assethistory" EntityType="ISL_HEALTHModel.assethistory" />
+          <EntitySet Name="assetmovement" EntityType="ISL_HEALTHModel.assetmovement" />
+          <EntitySet Name="CommonListValue" EntityType="ISL_HEALTHModel.CommonListValue" />
+          <EntitySet Name="movementtype" EntityType="ISL_HEALTHModel.movementtype" />
+          <EntitySet Name="place" EntityType="ISL_HEALTHModel.place" />
+          <AssociationSet Name="FK_AspNetGroupUser_ToGroup" Association="ISL_HEALTHModel.FK_AspNetGroupUser_ToGroup">
+            <End Role="AspNetGroups" EntitySet="AspNetGroups" />
+            <End Role="AspNetGroupUser" EntitySet="AspNetGroupUser" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoleGroup_ToGroup" Association="ISL_HEALTHModel.FK_AspNetRoleGroup_ToGroup">
+            <End Role="AspNetGroups" EntitySet="AspNetGroups" />
+            <End Role="AspNetRoleGroup" EntitySet="AspNetRoleGroup" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetGroupUser_ToUser" Association="ISL_HEALTHModel.FK_AspNetGroupUser_ToUser">
+            <End Role="AspNetUsers" EntitySet="AspNetUsers" />
+            <End Role="AspNetGroupUser" EntitySet="AspNetGroupUser" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Menu_ToMenuAspNetRoles" Association="ISL_HEALTHModel.FK_Menu_ToMenuAspNetRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetMenu" EntitySet="AspNetMenu" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Menu_ToMenuParent" Association="ISL_HEALTHModel.FK_Menu_ToMenuParent">
+            <End Role="AspNetMenu" EntitySet="AspNetMenu" />
+            <End Role="AspNetMenu1" EntitySet="AspNetMenu" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoleGroup_ToRoles" Association="ISL_HEALTHModel.FK_AspNetRoleGroup_ToRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetRoleGroup" EntitySet="AspNetRoleGroup" />
+          </AssociationSet>
+          <AssociationSet Name="FK_AspNetRoles_ToAspNetRoles" Association="ISL_HEALTHModel.FK_AspNetRoles_ToAspNetRoles">
+            <End Role="AspNetRoles" EntitySet="AspNetRoles" />
+            <End Role="AspNetRoles1" EntitySet="AspNetRoles" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETHIS_ASSETHIST_ASSET" Association="ISL_HEALTHModel.FK_ASSETHIS_ASSETHIST_ASSET">
+            <End Role="asset" EntitySet="asset" />
+            <End Role="assethistory" EntitySet="assethistory" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETMOV_ASSETMOVE_ASSETHIS" Association="ISL_HEALTHModel.FK_ASSETMOV_ASSETMOVE_ASSETHIS">
+            <End Role="asset" EntitySet="asset" />
+            <End Role="assetmovement" EntitySet="assetmovement" />
+          </AssociationSet>
+          <AssociationSet Name="FK_ASSETMOV_ToPlace" Association="ISL_HEALTHModel.FK_ASSETMOV_ToPlace">
+            <End Role="place" EntitySet="place" />
+            <End Role="assetmovement" EntitySet="assetmovement" />
+          </AssociationSet>
+          <AssociationSet Name="FK_CommonListValue_ToCommonListValue" Association="ISL_HEALTHModel.FK_CommonListValue_ToCommonListValue">
+            <End Role="CommonListValue" EntitySet="CommonListValue" />
+            <End Role="CommonListValue1" EntitySet="CommonListValue" />
+          </AssociationSet>
+          <AssociationSet Name="FK_PLACE_PLACE_IBF_PLACE" Association="ISL_HEALTHModel.FK_PLACE_PLACE_IBF_PLACE">
+            <End Role="place" EntitySet="place" />
+            <End Role="place1" EntitySet="place" />
+          </AssociationSet>
+          </EntityContainer>
+        <ComplexType Name="spEmployeeBirthdayList_Result">
+          <Property Type="String" Name="EmployeeId" Nullable="false" MaxLength="20" />
+          <Property Type="String" Name="FullName" Nullable="true" MaxLength="128" />
+          <Property Type="DateTime" Name="DateOfBirth" Nullable="true" Precision="23" />
+          <Property Type="Int32" Name="Age" Nullable="true" />
+          <Property Type="DateTime" Name="BirthDay" Nullable="true" Precision="23" />
+        </ComplexType>
+        <ComplexType Name="spEmployeeBirthdayListForCurrentMonth_Result">
+          <Property Type="String" Name="EmployeeId" Nullable="false" MaxLength="20" />
+          <Property Type="String" Name="FullName" Nullable="true" MaxLength="128" />
+          <Property Type="DateTime" Name="DateOfBirth" Nullable="true" Precision="23" />
+          <Property Type="Int32" Name="Age" Nullable="true" />
+          <Property Type="DateTime" Name="BirthDay" Nullable="true" Precision="23" />
+        </ComplexType>
+        <ComplexType Name="spEmployeeAbsence_Result">
+          <Property Type="String" Name="EmployeeId" Nullable="true" MaxLength="20" />
+          <Property Type="String" Name="FullName" Nullable="true" MaxLength="128" />
+          <Property Type="String" Name="AbsenceId" Nullable="true" MaxLength="6" />
+          <Property Type="DateTime" Name="TIME" Nullable="true" Precision="23" />
+        </ComplexType>
+        <EntityType Name="AspNetGroups">
+          <Key>
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="GroupName" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="GroupDescription" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetGroupUser" Relationship="ISL_HEALTHModel.FK_AspNetGroupUser_ToGroup" FromRole="AspNetGroups" ToRole="AspNetGroupUser" />
+          <NavigationProperty Name="AspNetRoleGroup" Relationship="ISL_HEALTHModel.FK_AspNetRoleGroup_ToGroup" FromRole="AspNetGroups" ToRole="AspNetRoleGroup" />
+        </EntityType>
+        <EntityType Name="AspNetGroupUser">
+          <Key>
+            <PropertyRef Name="Username" />
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="Username" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="GroupName" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetGroups" Relationship="ISL_HEALTHModel.FK_AspNetGroupUser_ToGroup" FromRole="AspNetGroupUser" ToRole="AspNetGroups" />
+          <NavigationProperty Name="AspNetUsers" Relationship="ISL_HEALTHModel.FK_AspNetGroupUser_ToUser" FromRole="AspNetGroupUser" ToRole="AspNetUsers" />
+        </EntityType>
+        <EntityType Name="AspNetLog">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="Entity" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Message" Type="String" MaxLength="1024" FixedLength="false" Unicode="false" />
+        </EntityType>
+        <EntityType Name="AspNetMenu">
+          <Key>
+            <PropertyRef Name="MenuId" />
+          </Key>
+          <Property Name="MenuId" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="MenuName" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="MenuParentId" Type="Int32" />
+          <Property Name="Sequence" Type="Int32" />
+          <Property Name="AspNetRoles" Type="Int32" />
+          <Property Name="MenuIClass" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="MenuLevel" Type="Int32" />
+          <Property Name="ShowAsChild" Type="Int16" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetRoles1" Relationship="ISL_HEALTHModel.FK_Menu_ToMenuAspNetRoles" FromRole="AspNetMenu" ToRole="AspNetRoles" />
+          <NavigationProperty Name="AspNetMenu1" Relationship="ISL_HEALTHModel.FK_Menu_ToMenuParent" FromRole="AspNetMenu" ToRole="AspNetMenu1" />
+          <NavigationProperty Name="AspNetMenu2" Relationship="ISL_HEALTHModel.FK_Menu_ToMenuParent" FromRole="AspNetMenu1" ToRole="AspNetMenu" />
+        </EntityType>
+        <EntityType Name="AspNetRoleGroup">
+          <Key>
+            <PropertyRef Name="RolesId" />
+            <PropertyRef Name="GroupName" />
+          </Key>
+          <Property Name="RolesId" Type="Int32" Nullable="false" />
+          <Property Name="GroupName" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetGroups" Relationship="ISL_HEALTHModel.FK_AspNetRoleGroup_ToGroup" FromRole="AspNetRoleGroup" ToRole="AspNetGroups" />
+          <NavigationProperty Name="AspNetRoles" Relationship="ISL_HEALTHModel.FK_AspNetRoleGroup_ToRoles" FromRole="AspNetRoleGroup" ToRole="AspNetRoles" />
+        </EntityType>
+        <EntityType Name="AspNetRoles">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="ParentId" Type="Int32" />
+          <Property Name="Name" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Type" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetMenu" Relationship="ISL_HEALTHModel.FK_Menu_ToMenuAspNetRoles" FromRole="AspNetRoles" ToRole="AspNetMenu" />
+          <NavigationProperty Name="AspNetRoleGroup" Relationship="ISL_HEALTHModel.FK_AspNetRoleGroup_ToRoles" FromRole="AspNetRoles" ToRole="AspNetRoleGroup" />
+          <NavigationProperty Name="AspNetRoles1" Relationship="ISL_HEALTHModel.FK_AspNetRoles_ToAspNetRoles" FromRole="AspNetRoles" ToRole="AspNetRoles1" />
+          <NavigationProperty Name="AspNetRoles2" Relationship="ISL_HEALTHModel.FK_AspNetRoles_ToAspNetRoles" FromRole="AspNetRoles1" ToRole="AspNetRoles" />
+        </EntityType>
+        <EntityType Name="AspNetSequential">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="Name" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="LastSequential" Type="Int64" Nullable="false" />
+          <Property Name="Status" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Year" Type="Int32" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+        </EntityType>
+        <EntityType Name="AspNetUsers">
+          <Key>
+            <PropertyRef Name="Username" />
+          </Key>
+          <Property Name="Username" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="FullName" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Password" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="Email" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="LastPasswordChange" Type="DateTime" Precision="3" />
+          <Property Name="LastLoginDate" Type="DateTime" Precision="3" />
+          <Property Name="ErrorTried" Type="Int32" />
+          <Property Name="TokenRegister" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="TokenForgotPassword" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="IsLocked" Type="Int16" />
+          <Property Name="Remark" Type="String" MaxLength="512" FixedLength="false" Unicode="false" />
+          <Property Name="User_Skin" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="User_Notes" Type="String" MaxLength="2048" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="AspNetGroupUser" Relationship="ISL_HEALTHModel.FK_AspNetGroupUser_ToUser" FromRole="AspNetUsers" ToRole="AspNetGroupUser" />
+        </EntityType>
+        <EntityType Name="asset">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="nama" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="notes" Type="String" MaxLength="1024" FixedLength="false" Unicode="false" />
+          <Property Name="assetId" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="serialNumber" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="employeeId" Type="String" MaxLength="20" FixedLength="false" Unicode="false" />
+          <Property Name="type" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="remarks" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="assethistory" Relationship="ISL_HEALTHModel.FK_ASSETHIS_ASSETHIST_ASSET" FromRole="asset" ToRole="assethistory" />
+          <NavigationProperty Name="assetmovement" Relationship="ISL_HEALTHModel.FK_ASSETMOV_ASSETMOVE_ASSETHIS" FromRole="asset" ToRole="assetmovement" />
+        </EntityType>
+        <EntityType Name="assethistory">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idAsset" Type="Int32" Nullable="false" />
+          <Property Name="picture" Type="Binary" MaxLength="1" FixedLength="true" />
+          <Property Name="dateCondition" Type="DateTime" Precision="3" />
+          <Property Name="remark" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="asset" Relationship="ISL_HEALTHModel.FK_ASSETHIS_ASSETHIST_ASSET" FromRole="assethistory" ToRole="asset" />
+        </EntityType>
+        <EntityType Name="assetmovement">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idAsset" Type="Int32" />
+          <Property Name="idPlace" Type="Int32" />
+          <Property Name="date" Type="DateTime" Precision="3" />
+          <Property Name="movementType" Type="Int32" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="Remark" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="asset" Relationship="ISL_HEALTHModel.FK_ASSETMOV_ASSETMOVE_ASSETHIS" FromRole="assetmovement" ToRole="asset" />
+          <NavigationProperty Name="place" Relationship="ISL_HEALTHModel.FK_ASSETMOV_ToPlace" FromRole="assetmovement" ToRole="place" />
+        </EntityType>
+        <EntityType Name="CommonListValue">
+          <Key>
+            <PropertyRef Name="Id" />
+          </Key>
+          <Property Name="Id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="ParentId" Type="Int32" />
+          <Property Name="Value" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="Text" Type="String" MaxLength="100" FixedLength="false" Unicode="false" />
+          <Property Name="Desc" Type="String" MaxLength="1024" FixedLength="false" Unicode="false" />
+          <Property Name="Desc2" Type="String" MaxLength="1024" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="CommonListValue1" Relationship="ISL_HEALTHModel.FK_CommonListValue_ToCommonListValue" FromRole="CommonListValue" ToRole="CommonListValue1" />
+          <NavigationProperty Name="CommonListValue2" Relationship="ISL_HEALTHModel.FK_CommonListValue_ToCommonListValue" FromRole="CommonListValue1" ToRole="CommonListValue" />
+        </EntityType>
+        <EntityType Name="movementtype">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="name" Type="Int32" />
+          <Property Name="description" Type="String" MaxLength="256" FixedLength="false" Unicode="false" />
+          <Property Name="remark" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+        </EntityType>
+        <EntityType Name="place">
+          <Key>
+            <PropertyRef Name="id" />
+          </Key>
+          <Property Name="id" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idParent" Type="Int32" />
+          <Property Name="code" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="nama" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="location" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="floorLevel" Type="Int32" />
+          <Property Name="remark" Type="String" MaxLength="128" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="CreatedDate" Type="DateTime" Precision="3" />
+          <Property Name="UpdatedBy" Type="String" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="UpdatedDate" Type="DateTime" Precision="3" />
+          <Property Name="IsActive" Type="Int16" />
+          <NavigationProperty Name="assetmovement" Relationship="ISL_HEALTHModel.FK_ASSETMOV_ToPlace" FromRole="place" ToRole="assetmovement" />
+          <NavigationProperty Name="place1" Relationship="ISL_HEALTHModel.FK_PLACE_PLACE_IBF_PLACE" FromRole="place" ToRole="place1" />
+          <NavigationProperty Name="place2" Relationship="ISL_HEALTHModel.FK_PLACE_PLACE_IBF_PLACE" FromRole="place1" ToRole="place" />
+        </EntityType>
+        <Association Name="FK_AspNetGroupUser_ToGroup">
+          <End Type="ISL_HEALTHModel.AspNetGroups" Role="AspNetGroups" Multiplicity="1" />
+          <End Type="ISL_HEALTHModel.AspNetGroupUser" Role="AspNetGroupUser" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetGroups">
+              <PropertyRef Name="GroupName" />
+            </Principal>
+            <Dependent Role="AspNetGroupUser">
+              <PropertyRef Name="GroupName" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoleGroup_ToGroup">
+          <End Type="ISL_HEALTHModel.AspNetGroups" Role="AspNetGroups" Multiplicity="1" />
+          <End Type="ISL_HEALTHModel.AspNetRoleGroup" Role="AspNetRoleGroup" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetGroups">
+              <PropertyRef Name="GroupName" />
+            </Principal>
+            <Dependent Role="AspNetRoleGroup">
+              <PropertyRef Name="GroupName" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetGroupUser_ToUser">
+          <End Type="ISL_HEALTHModel.AspNetUsers" Role="AspNetUsers" Multiplicity="1" />
+          <End Type="ISL_HEALTHModel.AspNetGroupUser" Role="AspNetGroupUser" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetUsers">
+              <PropertyRef Name="Username" />
+            </Principal>
+            <Dependent Role="AspNetGroupUser">
+              <PropertyRef Name="Username" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Menu_ToMenuAspNetRoles">
+          <End Type="ISL_HEALTHModel.AspNetRoles" Role="AspNetRoles" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.AspNetMenu" Role="AspNetMenu" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetMenu">
+              <PropertyRef Name="AspNetRoles" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Menu_ToMenuParent">
+          <End Type="ISL_HEALTHModel.AspNetMenu" Role="AspNetMenu" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.AspNetMenu" Role="AspNetMenu1" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetMenu">
+              <PropertyRef Name="MenuId" />
+            </Principal>
+            <Dependent Role="AspNetMenu1">
+              <PropertyRef Name="MenuParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoleGroup_ToRoles">
+          <End Type="ISL_HEALTHModel.AspNetRoles" Role="AspNetRoles" Multiplicity="1" />
+          <End Type="ISL_HEALTHModel.AspNetRoleGroup" Role="AspNetRoleGroup" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetRoleGroup">
+              <PropertyRef Name="RolesId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_AspNetRoles_ToAspNetRoles">
+          <End Type="ISL_HEALTHModel.AspNetRoles" Role="AspNetRoles" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.AspNetRoles" Role="AspNetRoles1" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="AspNetRoles">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="AspNetRoles1">
+              <PropertyRef Name="ParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETHIS_ASSETHIST_ASSET">
+          <End Type="ISL_HEALTHModel.asset" Role="asset" Multiplicity="1" />
+          <End Type="ISL_HEALTHModel.assethistory" Role="assethistory" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="asset">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assethistory">
+              <PropertyRef Name="idAsset" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETMOV_ASSETMOVE_ASSETHIS">
+          <End Type="ISL_HEALTHModel.asset" Role="asset" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.assetmovement" Role="assetmovement" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="asset">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assetmovement">
+              <PropertyRef Name="idAsset" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_ASSETMOV_ToPlace">
+          <End Type="ISL_HEALTHModel.place" Role="place" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.assetmovement" Role="assetmovement" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="place">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="assetmovement">
+              <PropertyRef Name="idPlace" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_CommonListValue_ToCommonListValue">
+          <End Type="ISL_HEALTHModel.CommonListValue" Role="CommonListValue" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.CommonListValue" Role="CommonListValue1" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="CommonListValue">
+              <PropertyRef Name="Id" />
+            </Principal>
+            <Dependent Role="CommonListValue1">
+              <PropertyRef Name="ParentId" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_PLACE_PLACE_IBF_PLACE">
+          <End Type="ISL_HEALTHModel.place" Role="place" Multiplicity="0..1" />
+          <End Type="ISL_HEALTHModel.place" Role="place1" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="place">
+              <PropertyRef Name="id" />
+            </Principal>
+            <Dependent Role="place1">
+              <PropertyRef Name="idParent" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        </Schema>
+    </edmx:ConceptualModels>
+    <!-- C-S mapping content -->
+    <edmx:Mappings>
+      <Mapping Space="C-S" xmlns="http://schemas.microsoft.com/ado/2009/11/mapping/cs">
+        <EntityContainerMapping StorageEntityContainer="ISL_HEALTHModelStoreContainer" CdmEntityContainer="DBEntities">
+          <EntitySetMapping Name="AspNetGroups">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetGroups">
+              <MappingFragment StoreEntitySet="AspNetGroups">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="GroupDescription" ColumnName="GroupDescription" />
+                <ScalarProperty Name="GroupName" ColumnName="GroupName" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetGroupUser">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetGroupUser">
+              <MappingFragment StoreEntitySet="AspNetGroupUser">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="GroupName" ColumnName="GroupName" />
+                <ScalarProperty Name="Username" ColumnName="Username" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetLog">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetLog">
+              <MappingFragment StoreEntitySet="AspNetLog">
+                <ScalarProperty Name="Message" ColumnName="Message" />
+                <ScalarProperty Name="Entity" ColumnName="Entity" />
+                <ScalarProperty Name="Id" ColumnName="Id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetMenu">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetMenu">
+              <MappingFragment StoreEntitySet="AspNetMenu">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="ShowAsChild" ColumnName="ShowAsChild" />
+                <ScalarProperty Name="MenuLevel" ColumnName="MenuLevel" />
+                <ScalarProperty Name="MenuIClass" ColumnName="MenuIClass" />
+                <ScalarProperty Name="AspNetRoles" ColumnName="AspNetRoles" />
+                <ScalarProperty Name="Sequence" ColumnName="Sequence" />
+                <ScalarProperty Name="MenuParentId" ColumnName="MenuParentId" />
+                <ScalarProperty Name="MenuName" ColumnName="MenuName" />
+                <ScalarProperty Name="MenuId" ColumnName="MenuId" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetRoleGroup">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetRoleGroup">
+              <MappingFragment StoreEntitySet="AspNetRoleGroup">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="GroupName" ColumnName="GroupName" />
+                <ScalarProperty Name="RolesId" ColumnName="RolesId" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetRoles">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetRoles">
+              <MappingFragment StoreEntitySet="AspNetRoles">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="Type" ColumnName="Type" />
+                <ScalarProperty Name="Name" ColumnName="Name" />
+                <ScalarProperty Name="ParentId" ColumnName="ParentId" />
+                <ScalarProperty Name="Id" ColumnName="Id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetSequential">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetSequential">
+              <MappingFragment StoreEntitySet="AspNetSequential">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Year" ColumnName="Year" />
+                <ScalarProperty Name="Status" ColumnName="Status" />
+                <ScalarProperty Name="LastSequential" ColumnName="LastSequential" />
+                <ScalarProperty Name="Name" ColumnName="Name" />
+                <ScalarProperty Name="Id" ColumnName="Id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="AspNetUsers">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.AspNetUsers">
+              <MappingFragment StoreEntitySet="AspNetUsers">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="User_Notes" ColumnName="User Notes" />
+                <ScalarProperty Name="User_Skin" ColumnName="User Skin" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="IsLocked" ColumnName="IsLocked" />
+                <ScalarProperty Name="TokenForgotPassword" ColumnName="TokenForgotPassword" />
+                <ScalarProperty Name="TokenRegister" ColumnName="TokenRegister" />
+                <ScalarProperty Name="ErrorTried" ColumnName="ErrorTried" />
+                <ScalarProperty Name="LastLoginDate" ColumnName="LastLoginDate" />
+                <ScalarProperty Name="LastPasswordChange" ColumnName="LastPasswordChange" />
+                <ScalarProperty Name="Email" ColumnName="Email" />
+                <ScalarProperty Name="Password" ColumnName="Password" />
+                <ScalarProperty Name="FullName" ColumnName="FullName" />
+                <ScalarProperty Name="Username" ColumnName="Username" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="asset">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.asset">
+              <MappingFragment StoreEntitySet="asset">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="remarks" ColumnName="remarks" />
+                <ScalarProperty Name="type" ColumnName="type" />
+                <ScalarProperty Name="employeeId" ColumnName="employeeId" />
+                <ScalarProperty Name="serialNumber" ColumnName="serialNumber" />
+                <ScalarProperty Name="assetId" ColumnName="assetId" />
+                <ScalarProperty Name="notes" ColumnName="notes" />
+                <ScalarProperty Name="nama" ColumnName="nama" />
+                <ScalarProperty Name="id" ColumnName="id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="assethistory">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.assethistory">
+              <MappingFragment StoreEntitySet="assethistory">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="remark" ColumnName="remark" />
+                <ScalarProperty Name="dateCondition" ColumnName="dateCondition" />
+                <ScalarProperty Name="picture" ColumnName="picture" />
+                <ScalarProperty Name="idAsset" ColumnName="idAsset" />
+                <ScalarProperty Name="id" ColumnName="id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="assetmovement">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.assetmovement">
+              <MappingFragment StoreEntitySet="assetmovement">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="Remark" ColumnName="Remark" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="movementType" ColumnName="movementType" />
+                <ScalarProperty Name="date" ColumnName="date" />
+                <ScalarProperty Name="idPlace" ColumnName="idPlace" />
+                <ScalarProperty Name="idAsset" ColumnName="idAsset" />
+                <ScalarProperty Name="id" ColumnName="id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="CommonListValue">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.CommonListValue">
+              <MappingFragment StoreEntitySet="CommonListValue">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="Desc2" ColumnName="Desc2" />
+                <ScalarProperty Name="Desc" ColumnName="Desc" />
+                <ScalarProperty Name="Text" ColumnName="Text" />
+                <ScalarProperty Name="Value" ColumnName="Value" />
+                <ScalarProperty Name="ParentId" ColumnName="ParentId" />
+                <ScalarProperty Name="Id" ColumnName="Id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="movementtype">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.movementtype">
+              <MappingFragment StoreEntitySet="movementtype">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="remark" ColumnName="remark" />
+                <ScalarProperty Name="description" ColumnName="description" />
+                <ScalarProperty Name="name" ColumnName="name" />
+                <ScalarProperty Name="id" ColumnName="id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="place">
+            <EntityTypeMapping TypeName="ISL_HEALTHModel.place">
+              <MappingFragment StoreEntitySet="place">
+                <ScalarProperty Name="IsActive" ColumnName="IsActive" />
+                <ScalarProperty Name="UpdatedDate" ColumnName="UpdatedDate" />
+                <ScalarProperty Name="UpdatedBy" ColumnName="UpdatedBy" />
+                <ScalarProperty Name="CreatedDate" ColumnName="CreatedDate" />
+                <ScalarProperty Name="CreatedBy" ColumnName="CreatedBy" />
+                <ScalarProperty Name="remark" ColumnName="remark" />
+                <ScalarProperty Name="floorLevel" ColumnName="floorLevel" />
+                <ScalarProperty Name="location" ColumnName="location" />
+                <ScalarProperty Name="nama" ColumnName="nama" />
+                <ScalarProperty Name="code" ColumnName="code" />
+                <ScalarProperty Name="idParent" ColumnName="idParent" />
+                <ScalarProperty Name="id" ColumnName="id" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+        </EntityContainerMapping>
+      </Mapping>
+    </edmx:Mappings>
+  </edmx:Runtime>
+  <!-- EF Designer content (DO NOT EDIT MANUALLY BELOW HERE) -->
+  <Designer xmlns="http://schemas.microsoft.com/ado/2009/11/edmx">
+    <Connection>
+      <DesignerInfoPropertySet>
+        <DesignerProperty Name="MetadataArtifactProcessing" Value="EmbedInOutputAssembly" />
+      </DesignerInfoPropertySet>
+    </Connection>
+    <Options>
+      <DesignerInfoPropertySet>
+        <DesignerProperty Name="ValidateOnBuild" Value="true" />
+        <DesignerProperty Name="EnablePluralization" Value="false" />
+        <DesignerProperty Name="IncludeForeignKeysInModel" Value="true" />
+        <DesignerProperty Name="UseLegacyProvider" Value="false" />
+        <DesignerProperty Name="CodeGenerationStrategy" Value="None" />
+      </DesignerInfoPropertySet>
+    </Options>
+    <!-- Diagram content (shape and connector positions) -->
+    <Diagrams></Diagrams>
+  </Designer>
+</edmx:Edmx>

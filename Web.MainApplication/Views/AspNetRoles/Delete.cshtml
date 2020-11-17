@@ -1,0 +1,44 @@
+﻿@model Repository.Application.DataModel.AspNetRoles
+@{
+    ViewBag.Title = "Delete Role Users";
+    //if (Request.Params["layoutIsNull"] != null && Convert.ToBoolean(Request.Params["layoutIsNull"]) == true)
+    //{
+    //    Layout = null;
+    //}
+}
+<div class="card box-solid">
+    <div class="card-body">
+        <div class="card-header with-border">
+            <b class="card-title">@ViewBag.Title</b>
+        </div>
+
+        <div class="card-body">
+            <div class="row">
+                @Html.Label("Name", htmlAttributes: new { @class = "control-label col-md-2" })
+                <div class="col-md-4">
+                    @Html.DisplayFor(model => model.Name)
+                </div>
+            </div><br />
+
+            <div class="row">
+                @Html.Label("Type", htmlAttributes: new { @class = "control-label col-md-2" })
+                <div class="col-md-4">
+                    @Html.DisplayFor(model => model.Type)
+                </div>
+            </div><br />
+
+
+        </div>
+        <div class="card-footer">
+            @using (Html.BeginForm())
+            {
+                @Html.AntiForgeryToken()
+
+                <div class="form-actions no-color">
+                    @*@Html.ActionLink("Back", "Index", null, new { @Class = "btn btn-default" })*@
+                    <input type="submit" value="Delete" class="btn btn-primary" style="background-color:#008CBA; color:white;" data-toggle="modal" data-target="#deleted" />
+                </div>
+            }
+        </div>
+    </div>
+</div>

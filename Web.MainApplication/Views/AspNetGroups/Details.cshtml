@@ -1,0 +1,61 @@
+﻿@model Repository.Application.DataModel.AspNetGroups
+
+<div class="card box-solid">
+    <div class="card-header with-border">
+        <b class="card-title">
+            Details Groups
+        </b>
+    </div>
+    <!-- /.box-header -->
+    <div class="card-body">
+
+            <div>
+                @Html.Label("Group Description", htmlAttributes: new { @class = "control-label col-md-2" })
+                <div class="col-md-4">
+                    @Html.DisplayFor(model => model.GroupDescription)
+                </div>
+            </div>
+       <br />
+
+   
+            <div>
+                @Html.Label("Remark", htmlAttributes: new { @class = "control-label col-md-2" })
+                <div class="col-md-4">
+                    @Html.DisplayFor(model => model.Remark)
+                </div>
+            </div>
+        <br />
+
+
+            <div>
+                @Html.Label("Roles", htmlAttributes: new { @class = "control-label col-md-2" })
+                <div class="col-md-4">
+                    @{ foreach (var item in Model.AspNetRoleGroup.OrderBy(x => x.AspNetRoles.Name))
+                        {
+                            if (item.AspNetRoles.ParentId != null)
+                            {
+                                @(item.AspNetRoles.AspNetRoles2.Name + " - " + item.AspNetRoles.Name)
+                            }
+                            else
+                            {
+                                @item.AspNetRoles.Name
+                            }
+                            <br />
+                        }
+                    }
+                </div>
+            </div>
+       <br />
+
+        <div class="card-footer">
+            <div class="form-group">
+                <div class="col-md-offset-2 col-md-10">
+                    @Html.ActionLink("Back", "Index", null, new { @Class = "btn btn-default" })
+                    @Html.ActionLink("Edit", "Edit", null, new { id = Model.GroupName }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>

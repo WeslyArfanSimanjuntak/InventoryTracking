@@ -1,0 +1,238 @@
+﻿@{
+    /**/
+
+    /**/
+
+    string baseUrl = Html.ViewContext.RequestContext.HttpContext.Request.Url.Scheme + "://" + Html.ViewContext.RequestContext.HttpContext.Request.Url.Authority;
+    string entityApiUrl = baseUrl + "/EntityApi/GetData";
+
+    string currentController = ViewContext.RouteData.Values["controller"].ToString().ToLower();
+    string currentAction = ViewContext.RouteData.Values["action"].ToString().ToLower();
+    var listNavigationBack = new Dictionary<int, string>();
+    if (Session["NavigationBack" + Web.MainApplication.Resources.SystemResources.ApplicationName] != null)
+    {
+        listNavigationBack = (Dictionary<int, string>)Session["NavigationBack" + Web.MainApplication.Resources.SystemResources.ApplicationName];
+    }
+    bool byNavigationBack = false;
+    byNavigationBack = Session["ByNavigationBack"] != null ? (bool)Session["ByNavigationBack"] : false;
+    Session["ByNavigationBack"] = null;
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- Page plugins -->
+    <link rel="stylesheet" href="~/Content/argon/bower_components/datatables.net-bs4/css/dataTables.bootstrap4.min.css">
+    <link rel="stylesheet" href="~/Content/argon/bower_components/datatables.net-buttons-bs4/css/buttons.bootstrap4.min.css">
+    <link rel="stylesheet" href="~/Content/argon/bower_components/datatables.net-select-bs4/css/select.bootstrap4.min.css">
+    <!-- Argon Resource (CSS) -->
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700" rel="stylesheet" />
+    @Styles.Render("~/Content/argon/bower_components/nucleo/css/nucleo.css")
+    @Styles.Render("~/Content/argon/bower_components/@fortawesome/fontawesome-free/css/all.min.css")
+    @Styles.Render("~/Content/argon/dist/css/argon.css")
+    <!--@Styles.Render("~/Content/argon/dist/css/argon.min.css")-->
+    <!-- End of Argon Resource (CSS) -->
+    <link rel="stylesheet" href="~/Content/adminlte/plugins/tempusdominus-bootstrap-4/css/tempusdominus-bootstrap-4.min.css" />
+
+    <link rel="stylesheet" href="~/Content/adminlte/plugins/jQueryUI/jquery-ui.min.css" />
+
+    <!-- Argon Resource (JS) -->
+    @Scripts.Render("~/Content/argon/bower_components/jquery/dist/jquery.min.js")
+    <script src="~/Scripts/jquery.unobtrusive-ajax.min.js"></script>
+    @Scripts.Render("~/Content/argon/bower_components/bootstrap/dist/js/bootstrap.bundle.min.js")
+    @Scripts.Render("~/Content/argon/bower_components/js-cookie/js.cookie.js")
+    @Scripts.Render("~/Content/argon/bower_components/jquery.scrollbar/jquery.scrollbar.min.js")
+    @Scripts.Render("~/Content/argon/bower_components/jquery-scroll-lock/dist/jquery-scrollLock.min.js")
+    @Scripts.Render("~/Content/argon/bower_components/chart.js/dist/Chart.min.js")
+    @Scripts.Render("~/Content/argon/bower_components/chart.js/dist/Chart.extension.js")
+    @Scripts.Render("~/Content/argon/dist/js/argon.js")
+    @Scripts.Render("~/Content/argon/dist/js/argon.min.js")
+    <!-- End of Argon Resource (JS) -->
+    <!-- Datatables -->
+    <script src="~/Content/argon/bower_components/datatables.net/js/jquery.dataTables.min.js"></script>
+    <script src="~/Content/argon/bower_components/datatables.net-bs4/js/dataTables.bootstrap4.min.js"></script>
+    <!--Tempusdominus-->
+    <script src="~/Content/adminlte/plugins/tempusdominus-bootstrap-4/js/tempusdominus-bootstrap-4.min.js"></script>
+    <script src="~/Content/adminlte/bower_components/moment/moment.js"></script>
+    <script type="text/javascript">
+        var baseUrl = '@baseUrl';
+        var entityApiUrl = '@entityApiUrl';
+        function AjaxCall(HandleResult, url, type, duration=750) {
+            type = (typeof b !== 'undefined') ? type : "GET";
+            $.ajax({
+                type: type,
+                url: url,
+                beforeSend: function () {
+                    if (duration > 0) {
+                        //$('#myModal').modal("show");
+                    }
+                },
+                complete: function () {
+                        //setTimeout(function () {
+                        //    $('#myModal').modal("hide");
+                        //}, duration);
+
+                },
+                success: function (data) {
+                    HandleResult(data);
+                },
+                error: function (data) {
+                    console.log(data);
+                }
+            });
+    }
+    </script>
+</head>
+
+<body>
+    <nav class="sidenav navbar navbar-vertical  fixed-left  navbar-expand-xs navbar-light bg-white" id="sidenav-main">
+        <div class="scrollbar-inner">
+            <!-- Brand -->
+            <div class="sidenav-header  align-items-center">
+                <a class="navbar-brand" href="javascript:void(0)">
+                    <img src="~/Content/image/group_logo_01.png" class="navbar-brand-img">
+                    <p><small>Inventory Tracking Indosurya Life</small></p>
+                </a>
+            </div>
+            <div class="navbar-inner">
+                <!-- Collapse -->
+                <div class="collapse navbar-collapse" id="sidenav-collapse-main">
+                    <!-- Nav items -->
+                    <ul class="navbar-nav">
+                        @Html.Raw(User.Identity.MenuString())
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+    <div class="main-content" id="panel">
+
+        <nav class="navbar navbar-top navbar-expand navbar-dark bg-primary border-bottom">
+            <div class="container-fluid">
+                <div class="collapse navbar-collapse" id="navbarSupportedContent">
+                    <!-- Search form -->
+                    <form class="navbar-search navbar-search-light form-inline mr-sm-3" id="navbar-search-main">
+                        <div class="form-group mb-0">
+                            <div class="input-group input-group-alternative input-group-merge">
+                                @*<div class="input-group-prepend">
+                                    <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                </div>*@
+                                @*<input class="form-control" placeholder="Search" type="text">*@
+                            </div>
+                        </div>
+                        <button type="button" class="close" data-action="search-close" data-target="#navbar-search-main" aria-label="Close">
+                            <span aria-hidden="true">×</span>
+                        </button>
+                    </form>
+                    <!-- Navbar links -->
+                    <ul class="navbar-nav align-items-center  ml-md-auto ">
+                        <li class="nav-item d-xl-none">
+                            <!-- Sidenav toggler -->
+                            <div class="pr-3 sidenav-toggler sidenav-toggler-dark" data-action="sidenav-pin" data-target="#sidenav-main">
+                                <div class="sidenav-toggler-inner">
+                                    <i class="sidenav-toggler-line"></i>
+                                    <i class="sidenav-toggler-line"></i>
+                                    <i class="sidenav-toggler-line"></i>
+                                </div>
+                            </div>
+                        </li>
+                        <li class="nav-item d-sm-none">
+                            <a class="nav-link" href="#" data-action="search-show" data-target="#navbar-search-main">
+                                <i class="ni ni-zoom-split-in"></i>
+                            </a>
+                        </li>
+                       
+                    </ul>
+                    <ul class="navbar-nav align-items-center  ml-auto ml-md-0 ">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link pr-0" href="#" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                                <div class="media align-items-center">
+                                    <span class="avatar avatar-sm rounded-circle">
+                                        <img src="~/Content/Upload/employee/custom/128x128/@(User.Identity.Username())_128x128.jpg">
+                                    </span>
+                                    <div class="media-body  ml-2  d-none d-lg-block">
+                                        <span class="mb-0 text-sm  font-weight-bold">@User.Identity.FullName()</span>
+                                    </div>
+                                </div>
+                            </a>
+                            <div class="dropdown-menu  dropdown-menu-right ">
+                                <div class="dropdown-header noti-title">
+                                    <h6 class="text-overflow m-0">Welcome!</h6>
+                                </div>
+                                @*<a href="#!" class="dropdown-item">
+                                    <i class="ni ni-single-02"></i>
+                                    <span>My profile</span>
+                                </a>
+                                <a href="#!" class="dropdown-item">
+                                    <i class="ni ni-settings-gear-65"></i>
+                                    <span>Settings</span>
+                                </a>
+                                <a href="#!" class="dropdown-item">
+                                    <i class="ni ni-calendar-grid-58"></i>
+                                    <span>Activity</span>
+                                </a>
+                                <a href="#!" class="dropdown-item">
+                                    <i class="ni ni-support-16"></i>
+                                    <span>Support</span>
+                                </a>
+                                <div class="dropdown-divider"></div>*@
+                                <a href="@(Url.Action("LogOff", "Account"))" method="post" asp-controller="Account" aspcontroller="LogOff" class="dropdown-item">
+                                    <i class="ni ni-user-run"></i>
+                                    <span>Logout</span>
+                                </a>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+
+        <div class="header bg-primary pb-6">
+            <div class="container-fluid">
+                <div class="header-body">
+                    <div class="row align-items-center py-4">
+                        <div class="col-lg-6 col-7">
+                            @*<h6 class="h2 text-white d-inline-block mb-0">Default</h6>
+                            <nav aria-label="breadcrumb" class="d-none d-md-inline-block ml-md-4">
+                                <ol class="breadcrumb breadcrumb-links breadcrumb-dark">
+                                    <li class="breadcrumb-item"><a href="#"><i class="fas fa-home"></i></a></li>
+                                    <li class="breadcrumb-item"><a href="#">Dashboards</a></li>
+                                    <li class="breadcrumb-item active" aria-current="page">Default</li>
+                                </ol>
+                            </nav>*@
+                        </div>
+                        <div class="col-lg-6 col-5 text-right">
+                            @*<a href="#" class="btn btn-sm btn-neutral">New</a>
+                                <a href="#" class="btn btn-sm btn-neutral">Filters</a>*@
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+        <div class="container-fluid mt--6">
+
+            @*@Html.Partial("_MessageToViewArgon")*@
+
+            <div id="loading">
+                <img src="~/Content/Images/ui-loader-white-16x16.gif" />
+            </div>
+
+            <div class="row">
+                <div class="col-xl-12">
+                    <div id="divBody">
+                        @Html.Partial("_MessageToViewArgon")
+                        @RenderBody()
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+
+</body>
+</html>3

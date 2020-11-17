@@ -1,0 +1,119 @@
+﻿@model string
+@{
+    var selectedSkin = User.Identity.Skin();
+}
+<div style="text-align:center">
+
+    <div class="box box-solid">
+        <div class="box-body">
+            <table id="layout-skins-list" class="table table-striped">
+                <thead>
+                    <tr>
+                        <th style="text-align:center">Skin Class</th>
+                        @*<th style="text-align:center">Preview</th>*@
+                        <th style="text-align:center">Preview & Select</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>skin-blue</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-blue" onclick="skinPreview('skin-blue')" class="btn btn-primary btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-blue", selectedSkin == "skin-blue", new { @onclick = "skinPreview('skin-blue')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-blue-light</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-blue-light" onclick="skinPreview('skin-blue-light')" class="btn btn-primary btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-blue-light", selectedSkin == "skin-blue-light", new { @onclick = "skinPreview('skin-blue-light')" })</td>
+
+                    </tr>
+                    <tr>
+                        <td><code>skin-yellow</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-yellow" onclick="skinPreview('skin-yellow')" class="btn btn-warning btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-yellow", selectedSkin == "skin-yellow", new { @onclick = "skinPreview('skin-yellow')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-yellow-light</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-yellow-light" onclick="skinPreview('skin-yellow-light')" class="btn btn-warning btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-yellow-light", selectedSkin == "skin-yellow-light", new { @onclick = "skinPreview('skin-yellow-light')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-green</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-green" onclick="skinPreview('skin-green')" class="btn btn-success btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-green", selectedSkin == "skin-green", new { @onclick = "skinPreview('skin-green')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-green-light</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-green-light" onclick="skinPreview('skin-green-light')" class="btn btn-success btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-green-light", selectedSkin == "skin-green-light", new { @onclick = "skinPreview('skin-green-light')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-purple</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-purple" onclick="skinPreview('skin-purple')" class="btn bg-purple btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-purple", selectedSkin == "skin-purple", new { @onclick = "skinPreview('skin-purple')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-purple-light</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-purple-light" onclick="skinPreview('skin-purple-light')" class="btn bg-purple btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-purple-light", selectedSkin == "skin-purple-light", new { @onclick = "skinPreview('skin-purple-light')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-red</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-red" onclick="skinPreview('skin-red')" class="btn btn-danger btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-red", selectedSkin == "skin-red", new { @onclick = "skinPreview('skin-red')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-red-light</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-red-light" onclick="skinPreview('skin-red-light')" class="btn btn-danger btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-red-light", selectedSkin == "skin-red-light", new { @onclick = "skinPreview('skin-red-light')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-black</code></td>
+                        @*<td>
+                                <a href="#" data-skin="skin-black" onclick="skinPreview('skin-black')" class="btn bg-black btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-black", selectedSkin == "skin-black", new { @onclick = "skinPreview('skin-black')" })</td>
+                    </tr>
+                    <tr>
+                        <td><code>skin-black-light</code></td>
+                        @*<td>
+                                <a href="#" id="skin-black-light" data-skin="skin-black-light" onclick="skinPreview('skin-black-light')" class="btn bg-black btn-xs"><i class="fa fa-eye"></i></a>
+                            </td>*@
+                        <td>@Html.RadioButton("skin", "skin-black-light", selectedSkin == "skin-black-light", new { @onclick = "skinPreview('skin-black-light')" })</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div><!-- /.box-body -->
+    </div>
+</div>
+<script>
+
+    $(document).ready(function () {
+
+
+    });
+    function skinPreview(skin) {
+        $('body').prop('class', skin + " sidebar-mini wysihtml5-supported");
+        //alert($("#skin-black-light").attr("class"));
+    }
+
+</script>

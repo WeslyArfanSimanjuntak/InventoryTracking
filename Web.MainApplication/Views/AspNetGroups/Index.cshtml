@@ -1,0 +1,113 @@
+﻿@model IEnumerable<Repository.Application.DataModel.AspNetGroups>
+@{
+    ViewBag.Title = "Groups";
+}
+
+<div class="card box-solid">
+    <div class="card-header with-border">
+        <b class="card-title">@ViewBag.Title</b>
+    </div>
+    <div class="card-header with-border">
+        <h3 class="card-title">
+            @Html.ActionLink("Create New", "Create", null, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+        </h3>
+    </div>
+
+    <div class="card-body">
+        <table class="table table-bordered table-striped" id="userTable">
+            <thead>
+                <tr>
+                    <th>
+                        Group Description
+                    </th>
+                    <th>
+                        Remark
+                    </th>
+                    @*<th>
+                                Created By
+                            </th>
+                            <th>
+                                Updated By
+                            </th>
+                            <th>
+                                Created Date
+                            </th>
+                            <th>
+                                Updated Date
+                            </th>
+                        <th>
+                            Is Active
+                        </th>*@
+                    <th>
+                        Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.GroupDescription)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Remark)
+                        </td>
+                        @*<td>
+                                @Html.DisplayFor(modelItem => item.CreatedBy)
+                            </td>
+                            <td>
+                                @Html.DisplayFor(modelItem => item.UpdatedBy)
+                            </td>
+                            <td>
+                                @Html.DisplayFor(modelItem => item.CreatedDate)
+                            </td>
+                            <td>
+                                @Html.DisplayFor(modelItem => item.UpdatedDate)
+                            </td>
+                            <td>
+                                @Html.DisplayFor(modelItem => item.IsActive)
+                            </td>*@
+                        <td>
+                            @Html.ActionLink("Edit", "Edit", new { id = item.GroupName }) |
+                            @Html.ActionLink("Details", "Details", new { id = item.GroupName }) |
+                            @*@Html.ActionLink("Delete", "Delete", new { id = item.GroupName })*@
+                            @Ajax.ActionLink("Delete", "Delete", new { id = item.GroupName, layoutIsNull = true }, new AjaxOptions() {
+                           OnBegin = "ShowSpinner();$('#myModalTemporaryContent').html('');",
+                           OnSuccess = "HideSpinner();",
+                           LoadingElementDuration = 3000,
+                           OnComplete = "$('#myModalTemporary').modal('show');",
+                           UpdateTargetId = "myModalTemporaryContent",
+                           HttpMethod = "GET",
+                           InsertionMode = InsertionMode.Replace
+                       })
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<script type="text/javascript">
+    (function ($) {
+
+
+        $('#userTable').DataTable({
+            'paging': true,
+            'lengthMenu': [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+            'pageLength': 10,
+            'searching': true,
+            'ordering': true,
+            'info': true,
+            'autoWidth': false,
+            'scrollX': true,
+            "language": {
+                "paginate": {
+                    "previous": '<i class="fas fa-angle-left"></i>',
+                    "next": '<i class="fas fa-angle-right"></i>'
+                }
+            }
+        });
+    }(jQuery));
+
+</script>

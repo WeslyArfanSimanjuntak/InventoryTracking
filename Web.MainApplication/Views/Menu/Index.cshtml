@@ -1,0 +1,121 @@
+﻿@model IEnumerable<Repository.Application.DataModel.AspNetMenu>
+@{
+    ViewBag.Title = "Menu";
+}
+
+<div class="card box-solid">
+    <div class="card-header with-border">
+        <b class="card-title">@ViewBag.Title</b>
+    </div>
+    <div class="card-header with-border">
+        <h3 class="card-title">
+            @Html.ActionLink("Create New", "Create", null, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+        </h3>
+    </div>
+
+    <div class="card-body">
+        <table class="table table-bordered table-striped" id="menusTable">
+            <thead>
+                <tr>
+                    <th>
+                        Menu Name
+                    </th>
+                    <th>
+                        Parent Menu
+                    </th>
+                    <th>
+                        Roles
+                    </th>
+                    <th>
+                        Sequence
+                    </th>
+                    <th>
+                        Icon Class
+                    </th>
+                    <th>
+                        Menu Level
+                    </th>
+                    <th>
+                        Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model)
+                {
+
+                    <tr>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.MenuName)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.AspNetMenu2.MenuName)
+                        </td>
+                        <td>
+                            @{
+                                if (item.AspNetRoles1 != null)
+                                {
+                                    if (item.AspNetRoles1.Type == "Controller")
+                                    {
+                                        @item.AspNetRoles1.Name
+                                    }
+                                    else
+                                    {
+                                        @("-- " + item.AspNetRoles1.Name)
+                                    }
+                                }
+
+                            }
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Sequence)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.MenuIClass)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.MenuLevel)
+                        </td>
+                        <td>
+                            @Html.ActionLink("Edit", "Edit", new { id = item.MenuId }) |
+                            @Html.ActionLink("Details", "Details", new { id = item.MenuId }) |
+                            @*@Html.ActionLink("Delete", "Delete", new { id = item.MenuId })*@
+                            @Ajax.ActionLink("Delete", "Delete", new { id = item.MenuId, layoutIsNull = true }, new AjaxOptions()
+                            {
+                           OnBegin = "ShowSpinner();$('#myModalTemporaryContent').html('');",
+                           OnSuccess = "HideSpinner();",
+                           LoadingElementDuration = 3000,
+                           OnComplete = "$('#myModalTemporary').modal('show');",
+                           UpdateTargetId = "myModalTemporaryContent",
+                           HttpMethod = "GET",
+                           InsertionMode = InsertionMode.Replace
+                       })
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script type="text/javascript">
+    (function ($) {
+        $('#menusTable').DataTable({
+            'lengthMenu': [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+            'pageLength': 10,
+            'paging': true,
+            'searching': true,
+            'ordering': true,
+            'info': true,
+            'autoWidth': false,
+            'scrollX': true,
+            "language": {
+                "paginate": {
+                    "previous": '<i class="fas fa-angle-left"></i>',
+                    "next": '<i class="fas fa-angle-right"></i>'
+                }
+            }
+        });
+    }(jQuery));
+
+</script>

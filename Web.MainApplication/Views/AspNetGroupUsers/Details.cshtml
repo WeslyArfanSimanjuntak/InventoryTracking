@@ -1,0 +1,36 @@
+﻿@model Repository.Application.DataModel.AspNetGroupUser
+@{
+    ViewBag.Title = "Details";
+}
+<div class="card card-solid">
+    <div class="card-header with-border">
+        <b class="card-title">@ViewBag.Title</b>
+    </div>
+
+    <div class="card-body">
+
+
+        <div>
+            @Html.Label("Group Description", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.AspNetGroups.GroupDescription)
+            </div>
+        </div>
+        <br />
+
+
+        <div>
+            @Html.Label("FullName", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.AspNetUsers.FullName)
+            </div>
+        </div>
+        <br />
+
+    </div>
+
+    <div class="card-footer">
+        @Html.ActionLink("Back", "Index", null, new { @Class = "btn btn-default" })
+        @Html.ActionLink("Edit", "Edit", null, new { username = Model.Username, groupName = Model.GroupName }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+    </div>
+</div>

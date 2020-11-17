@@ -1,0 +1,66 @@
+﻿@model Repository.Application.DataModel.AspNetMenu
+<div class="card card-solid">
+    <div class="card-header with-border">
+        <b class="card-title">
+            Details Menu
+        </b>
+    </div>
+
+    <div class="card-body">
+        <div>
+            @Html.Label("Menu Name", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.MenuName)
+            </div>
+        </div>
+        <br />
+
+        <div>
+            @Html.Label("Sequence", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.Sequence)
+            </div>
+        </div>
+        <br />
+
+        <div>
+            @Html.Label("Icon Class", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.MenuIClass)
+            </div>
+        </div>
+        <br />
+
+        <div>
+            @Html.Label("Menu Level", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.MenuLevel)
+            </div>
+        </div>
+        <br />
+
+        <div>
+            @Html.Label("Roles Name", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.AspNetRoles1.Name)
+            </div>
+        </div>
+        <br />
+
+        <div>
+            @Html.Label("Menu Name", htmlAttributes: new { @class = "control-label col-md-2" })
+            <div class="col-md-4">
+                @Html.DisplayFor(model => model.AspNetMenu2.MenuName)
+            </div>
+        </div>
+        <br />
+
+        <div class="card-footer">
+            <div class="form-group">
+                @Html.ActionLink("Back", "Index", null, new { @Class = "btn btn-default" })
+                @Html.ActionLink("Edit", "Edit", null, new { id = Model.MenuId }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+            </div>
+        </div>
+
+    </div>
+</div>

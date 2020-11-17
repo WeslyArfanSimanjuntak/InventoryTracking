@@ -1,0 +1,296 @@
+﻿@model IEnumerable<Repository.Application.DataModel.AspNetRoles>
+@{
+    ViewBag.Title = "Role Users";
+
+    var mvcRoles = Model.Where(x => x.Type.ToLower() == "controller" || x.AspNetRoles2?.Type.ToLower() == "controller");
+    var apiRoles = Model.Where(x => x.Type.ToLower() == "controller api" || x.AspNetRoles2?.Type.ToLower() == "controller api");
+    var odataRoles = Model.Where(x => x.Type.ToLower() == "controller odata" || x.AspNetRoles2?.Type.ToLower() == "controller odata");
+
+}
+
+<div class="card">
+    <div class="card-header">
+        <b class="card-title">MVC Roles</b>
+    </div>
+    <div class="card-header with-border">
+        <h3 class="box-title">
+            @Html.ActionLink("Create New", "Create", new { type = "Controller" }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+        </h3>
+    </div>
+
+    <div class="card-body">
+        <table class="table table-bordered table-striped" id="rolesTable">
+            <thead>
+                <tr>
+                    <th>
+                        Id
+                    </th>
+                    <th>
+                        Name
+                    </th>
+                    <th>
+                        Parent Name
+                    </th>
+                    <th>
+                        Type
+                    </th>
+                    <th>
+                        Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in mvcRoles)
+                {
+                    <tr>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Id)
+                        </td>
+                        <td>
+                            @{
+                                if (item.Type == "Controller")
+                                {
+                                    @item.Name
+                                }
+                                else
+                                {
+                                    @("-- " + item.Name)
+                                }
+                            }
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.AspNetRoles2.Name)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Type)
+                        </td>
+                        <td>
+                            @Html.ActionLink("Edit", "Edit", new { id = item.Id }) |
+                            @Html.ActionLink("Details", "Details", new { id = item.Id }) |
+                            @*@Html.ActionLink("Delete", "Delete", new { id = item.Id })*@
+                            @Ajax.ActionLink("Delete", "Delete", new { id = item.Id, layoutIsNull = true }, new AjaxOptions()
+                            {
+                           OnBegin = "ShowSpinner();$('#myModalTemporaryContent').html('');",
+                           OnSuccess = "HideSpinner();",
+                           LoadingElementDuration = 3000,
+                           OnComplete = "$('#myModalTemporary').modal('show');",
+                           UpdateTargetId = "myModalTemporaryContent",
+                           HttpMethod = "GET",
+                           InsertionMode = InsertionMode.Replace
+                       })
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header with-border">
+        <b class="card-title">API Roles</b>
+    </div>
+    <div class="card-header with-border">
+        <h3 class="card-title">
+            @Html.ActionLink("Create New", "Create", new { type = "Controller Api" }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+        </h3>
+    </div>
+
+    <div class="card-body">
+        <table class="table table-bordered table-striped" id="apirolesTable">
+            <thead>
+                <tr>
+                    <th>
+                        Id
+                    </th>
+                    <th>
+                        Name
+                    </th>
+                    <th>
+                        Parent Name
+                    </th>
+                    <th>
+                        Type
+                    </th>
+                    <th>
+                        Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in apiRoles)
+                {
+                    <tr>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Id)
+                        </td>
+                        <td>
+                            @{
+                                if (item.Type == "Controller")
+                                {
+                                    @item.Name
+                                }
+                                else
+                                {
+                                    @("-- " + item.Name)
+                                }
+                            }
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.AspNetRoles2.Name)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Type)
+                        </td>
+                        <td>
+                            @Html.ActionLink("Edit", "Edit", new { id = item.Id }) |
+                            @Html.ActionLink("Details", "Details", new { id = item.Id }) |
+                            @*@Html.ActionLink("Delete", "Delete", new { id = item.Id })*@
+                            @Ajax.ActionLink("Delete", "Delete", new { id = item.Id, layoutIsNull = true }, new AjaxOptions()
+                            {
+                            OnBegin = "ShowSpinner();$('#myModalTemporaryContent').html('');",
+                            OnSuccess = "HideSpinner();",
+                            LoadingElementDuration = 3000,
+                            OnComplete = "$('#myModalTemporary').modal('show');",
+                            UpdateTargetId = "myModalTemporaryContent",
+                            HttpMethod = "GET",
+                            InsertionMode = InsertionMode.Replace
+                            })
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="card">
+    <div class="card-header with-border">
+        <b class="card-title">ODATA Roles</b>
+    </div>
+    <div class="card-header with-border">
+        <h3 class="card-title">
+            @Html.ActionLink("Create New", "Create", new { type = "Controller Odata" }, new { @class = "btn btn-primary", @style = "background-color:#008CBA; color:white;" })
+        </h3>
+    </div>
+
+    <div class="card-body">
+        <table class="table table-bordered table-striped" id="odatarolesTable">
+            <thead>
+                <tr>
+                    <th>
+                        Id
+                    </th>
+                    <th>
+                        Name
+                    </th>
+                    <th>
+                        Parent Name
+                    </th>
+                    <th>
+                        Type
+                    </th>
+                    <th>
+                        Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in odataRoles)
+                {
+                    <tr>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Id)
+                        </td>
+                        <td>
+                            @{
+                                if (item.Type == "Controller")
+                                {
+                                    @item.Name
+                                }
+                                else
+                                {
+                                    @("-- " + item.Name)
+                                }
+                            }
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.AspNetRoles2.Name)
+                        </td>
+                        <td>
+                            @Html.DisplayFor(modelItem => item.Type)
+                        </td>
+                        <td>
+                            @Html.ActionLink("Edit", "Edit", new { id = item.Id }) |
+                            @Html.ActionLink("Details", "Details", new { id = item.Id }) |
+                            @*@Html.ActionLink("Delete", "Delete", new { id = item.Id })*@
+                            @Ajax.ActionLink("Delete", "Delete", new { id = item.Id, layoutIsNull = true }, new AjaxOptions()
+                            {
+                           OnBegin = "ShowSpinner();$('#myModalTemporaryContent').html('');",
+                           OnSuccess = "HideSpinner();",
+                           LoadingElementDuration = 3000,
+                           OnComplete = "$('#myModalTemporary').modal('show');",
+                           UpdateTargetId = "myModalTemporaryContent",
+                           HttpMethod = "GET",
+                           InsertionMode = InsertionMode.Replace
+                       })
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<script type="text/javascript">
+    (function ($) {
+
+
+        $('#rolesTable').DataTable({
+            'lengthMenu': [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+            'pageLength': 10,
+            'paging': true,
+            'searching': true,
+            'ordering': true,
+            'info': true,
+            'autoWidth': false,
+            'scrollX': true,
+            "language": {
+                "paginate": {
+                    "previous": '<i class="fas fa-angle-left"></i>',
+                    "next": '<i class="fas fa-angle-right"></i>'
+                }
+            }
+        });
+        $('#apirolesTable').DataTable({
+            'lengthMenu': [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+            'pageLength': 10,
+            'paging': true,
+            'searching': true,
+            'ordering': true,
+            'info': true,
+            'autoWidth': false,
+            'scrollX': true,
+            "language": {
+                "paginate": {
+                    "previous": '<i class="fas fa-angle-left"></i>',
+                    "next": '<i class="fas fa-angle-right"></i>'
+                }
+            }
+        });
+        $('#odatarolesTable').DataTable({
+            'lengthMenu': [[5, 10, 25, 50, -1], [5, 10, 25, 50, "All"]],
+            'pageLength': 10,
+            'paging': true,
+            'searching': true,
+            'ordering': true,
+            'info': true,
+            'autoWidth': false,
+            'scrollX': true,
+            "language": {
+                "paginate": {
+                    "previous": '<i class="fas fa-angle-left"></i>',
+                    "next": '<i class="fas fa-angle-right"></i>'
+                }
+            }
+        });
+    }(jQuery));
+
+</script>

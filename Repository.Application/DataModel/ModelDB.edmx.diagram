@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
+ <!-- EF Designer content (DO NOT EDIT MANUALLY BELOW HERE) -->
+  <edmx:Designer xmlns="http://schemas.microsoft.com/ado/2009/11/edmx">
+    <!-- Diagram content (shape and connector positions) -->
+    <edmx:Diagrams>
+      <Diagram DiagramId="1c9d9e8443b747098d2103f591d00a65" Name="Diagram1" ZoomLevel="60">
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetGroups" Width="1.5" PointX="0.75" PointY="0.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetGroupUser" Width="1.5" PointX="3" PointY="0.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetLog" Width="1.5" PointX="9.75" PointY="7.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetMenu" Width="1.5" PointX="3" PointY="8.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetRoleGroup" Width="1.5" PointX="3" PointY="4.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetRoles" Width="1.5" PointX="0.75" PointY="5.375" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetSequential" Width="1.5" PointX="10.75" PointY="2.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.AspNetUsers" Width="1.5" PointX="0.75" PointY="14.625" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.asset" Width="1.5" PointX="5.75" PointY="8" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.assethistory" Width="1.5" PointX="8" PointY="12.375" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.assetmovement" Width="1.5" PointX="8" PointY="3.25" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.CommonListValue" Width="1.5" PointX="7.75" PointY="7.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.movementtype" Width="1.5" PointX="10.75" PointY="10.75" />
+        <EntityTypeShape EntityType="ISL_HEALTHModel.place" Width="1.5" PointX="5.75" PointY="3" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_AspNetGroupUser_ToGroup" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_AspNetRoleGroup_ToGroup" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_AspNetGroupUser_ToUser" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_Menu_ToMenuAspNetRoles" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_Menu_ToMenuParent" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_AspNetRoleGroup_ToRoles" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_AspNetRoles_ToAspNetRoles" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_ASSETHIS_ASSETHIST_ASSET" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_ASSETMOV_ASSETMOVE_ASSETHIS" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_ASSETMOV_ToPlace" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_CommonListValue_ToCommonListValue" />
+        <AssociationConnector Association="ISL_HEALTHModel.FK_PLACE_PLACE_IBF_PLACE" />
+      </Diagram>
+    </edmx:Diagrams>
+  </edmx:Designer>
+</edmx:Edmx>
