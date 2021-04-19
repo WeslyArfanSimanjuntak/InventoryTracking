@@ -36,3 +36,12849 @@ namespace Repository.Application.DataModel
         public virtual ICollection<AspNetRoleGroup> AspNetRoleGroup { get; set; }
     }
 }
+USE [master]
+GO
+/****** Object:  Database [MORE2_Master]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE DATABASE [MORE2_Master]
+ CONTAINMENT = NONE
+ ON  PRIMARY 
+( NAME = N'MORE2_Master', FILENAME = N'D:\Program Files\Microsoft SQL Server\MSSQL12.MSSQLSERVER\MSSQL\DATA\MORE2_Master.mdf' , SIZE = 73728KB , MAXSIZE = UNLIMITED, FILEGROWTH = 65536KB )
+ LOG ON 
+( NAME = N'MORE2_Master_log', FILENAME = N'D:\Program Files\Microsoft SQL Server\MSSQL12.MSSQLSERVER\MSSQL\DATA\MORE2_Master_log.ldf' , SIZE = 139264KB , MAXSIZE = 2048GB , FILEGROWTH = 65536KB )
+GO
+ALTER DATABASE [MORE2_Master] SET COMPATIBILITY_LEVEL = 110
+GO
+IF (1 = FULLTEXTSERVICEPROPERTY('IsFullTextInstalled'))
+begin
+EXEC [MORE2_Master].[dbo].[sp_fulltext_database] @action = 'enable'
+end
+GO
+ALTER DATABASE [MORE2_Master] SET ANSI_NULL_DEFAULT OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET ANSI_NULLS OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET ANSI_PADDING OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET ANSI_WARNINGS OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET ARITHABORT OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET AUTO_CLOSE OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET AUTO_CREATE_STATISTICS ON 
+GO
+ALTER DATABASE [MORE2_Master] SET AUTO_SHRINK OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET AUTO_UPDATE_STATISTICS ON 
+GO
+ALTER DATABASE [MORE2_Master] SET CURSOR_CLOSE_ON_COMMIT OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET CURSOR_DEFAULT  GLOBAL 
+GO
+ALTER DATABASE [MORE2_Master] SET CONCAT_NULL_YIELDS_NULL OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET NUMERIC_ROUNDABORT OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET QUOTED_IDENTIFIER OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET RECURSIVE_TRIGGERS OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET  DISABLE_BROKER 
+GO
+ALTER DATABASE [MORE2_Master] SET AUTO_UPDATE_STATISTICS_ASYNC OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET DATE_CORRELATION_OPTIMIZATION OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET TRUSTWORTHY OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET ALLOW_SNAPSHOT_ISOLATION OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET PARAMETERIZATION SIMPLE 
+GO
+ALTER DATABASE [MORE2_Master] SET READ_COMMITTED_SNAPSHOT ON 
+GO
+ALTER DATABASE [MORE2_Master] SET HONOR_BROKER_PRIORITY OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET RECOVERY FULL 
+GO
+ALTER DATABASE [MORE2_Master] SET  MULTI_USER 
+GO
+ALTER DATABASE [MORE2_Master] SET PAGE_VERIFY CHECKSUM  
+GO
+ALTER DATABASE [MORE2_Master] SET DB_CHAINING OFF 
+GO
+ALTER DATABASE [MORE2_Master] SET FILESTREAM( NON_TRANSACTED_ACCESS = OFF ) 
+GO
+ALTER DATABASE [MORE2_Master] SET TARGET_RECOVERY_TIME = 60 SECONDS 
+GO
+EXEC sys.sp_db_vardecimal_storage_format N'MORE2_Master', N'ON'
+GO
+USE [MORE2_Master]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_AuditTrail_GetDataReport]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE Proc [dbo].[SP_AuditTrail_GetDataReport]
+	@Id varchar(50),
+	@BrokerId int,
+	@OrderColumn VARCHAR(100),
+	@Order VARCHAR(100),
+	@Skip INT,
+	@Take INT,
+	@Filter VARCHAR(MAX)
+as
+begin
+	declare
+		@TableName varchar(50),
+		@Key varchar(50),
+		@Sql varchar(max)
+	select @TableName=TableName,@Key=__KEY from MasterReportAuditrail where Id=@Id
+
+	declare @query varchar(max)
+	declare @CountData INT
+	declare @CountTable TABLE(Counter INT)
+	set @query ='
+		select 
+			count(*) Counter
+			from (
+			SELECT 
+				--ClientId,
+				Case 
+					when Type = ''I'' then ''Inserted''
+					when Type = ''U'' then ''Updated''
+					when Type in (''D'',''PD'') then ''Deleted''
+					else Type
+				End Status,
+				Field = STUFF((
+					SELECT 
+						case when Field !='''' then ''; '' +  Field end 
+						FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+				OldValue = STUFF((
+					SELECT 
+						case when OldValue !='''' then ''; '' +  dbo.HtmlRemove(OldValue) end 
+					FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+				NewValue = STUFF((
+					SELECT ''; '' + dbo.HtmlRemove(NewValue)
+					FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+					CONVERT(varchar(17), CreatedAt,113) CreatedAt,
+					CreatedAt CreatedAtUnFormat,
+					CreatedBy
+			FROM '+@TableName+' a 
+			group by '+@Key+',Type,CreatedAt,CreatedBy
+		)a left join AspNetUsers b on a.CreatedBy=b.Id
+		left join CustomerUser c on b.Id=c.UserId
+		where 1=1
+	' + @Filter
+	
+	if @BrokerId !=0
+	begin 
+		set @query+= ' and c.BrokerId = '+cast(@BrokerId as varchar)+' '
+	end
+
+	insert into @CountTable
+	exec(@query)
+
+	select @CountData = Counter from @CountTable
+
+	set @Sql ='
+		select 
+			 a.*
+			,isnull(case when a.CreatedBy = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER) then ''Delete data from database'' else  b.UserName end,'''') UserName
+			,Isnull(OldValue,'''')OldV 
+			,isnull(c.BrokerId,0)BrokerId
+			,'+ CAST(@CountData AS VARCHAR(10)) +' AS Counter
+			from (
+			SELECT 
+				--ClientId,
+				Case 
+					when Type = ''I'' then ''Inserted''
+					when Type = ''U'' then ''Updated''
+					when Type in (''D'',''PD'') then ''Deleted''
+					else Type
+				End Status,
+				Field = STUFF((
+					SELECT 
+						case when Field !='''' then ''; '' +  Field end 
+						FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+				OldValue = STUFF((
+					SELECT 
+						case when OldValue !='''' then ''; '' +  dbo.HtmlRemove(OldValue) end 
+					FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+				NewValue = STUFF((
+					SELECT ''; '' + dbo.HtmlRemove(NewValue)
+					FROM '+@TableName+' where '+@Key+'=a.'+@Key+' and Type=a.Type and a.CreatedAt=CreatedAt  order by Field asc
+					FOR XML PATH('''')
+					), 1, 1, ''''),
+					CONVERT(varchar(17), CreatedAt,113) CreatedAt,
+					CreatedAt CreatedAtUnFormat,
+					CreatedBy
+			FROM '+@TableName+' a 
+			group by '+@Key+',Type,CreatedAt,CreatedBy
+		)a left join AspNetUsers b on a.CreatedBy=b.Id
+		left join CustomerUser c on b.Id=c.UserId
+		where 1=1
+	' + @Filter
+
+	if @BrokerId !=0
+	begin 
+		set @sql+= ' and c.BrokerId = '+cast(@BrokerId as varchar)+' '
+	end
+
+	set @sql = @sql + ' ORDER BY '+ @OrderColumn +' '+ @Order
+
+	IF @Take > 0
+	BEGIN
+		SET @sql = @sql + 
+			' OFFSET ' + CAST(@Skip AS VARCHAR) + ' ROWS' +
+			' FETCH NEXT ' + CAST(@Take AS VARCHAR) + ' ROWS ONLY'
+	END
+
+	print (@Sql)
+	exec (@Sql)
+end
+-- END CODE HERE --
+-- VERSION [20190617.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Broker_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE PROCEDURE [dbo].[SP_Broker_GridView]
+AS
+	SELECT 
+		Bro.Id,
+		ISNULL(Bro.CustomerId, '') as CustomerId,
+		ISNULL(Bro.Name,'') as Name,
+		ISNULL(Bro.Address,'') as Address,
+		ISNULL(Bro.Country,'') as Country,
+		ISNULL(Bro.State,'') as State,
+		ISNULL(Bro.City,'') as City,
+		ISNULL(Bro.Phone,'') as Phone,
+		ISNULL(Bro.Website,'') as Website,
+		Bro.Status,
+		Bro.CreatedAt,
+		Bro.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy
+	FROM Customer Bro
+	LEFT JOIN AspNetUsers CR ON CR.Id = Bro.CreatedBy
+	LEFT JOIN AspNetUsers M ON M.Id = Bro.ModifiedBy
+	WHERE Bro.Id NOT IN (SELECT BrokerId FROM BrokerTemp)
+	UNION
+	SELECT 
+		CASE WHEN Bro.BrokerId = 0
+			THEN Bro.Id
+			ELSE Bro.BrokerId
+		END Id,
+		ISNULL(Bro.CustomerId, '') as CustomerId,
+		ISNULL(Bro.Name,'') as Name,
+		ISNULL(Bro.Address,'') as Address,
+		ISNULL(Bro.Country,'') as Country,
+		ISNULL(Bro.State,'') as State,
+		ISNULL(Bro.City,'') as City,
+		ISNULL(Bro.Phone,'') as Phone,
+		ISNULL(Bro.Website,'') as Website,
+		Bro.Status,
+		Bro.CreatedAt,
+		Bro.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy
+	FROM BrokerTemp Bro
+	LEFT JOIN AspNetUsers CR ON CR.Id = Bro.CreatedBy
+	LEFT JOIN AspNetUsers M ON M.Id = Bro.ModifiedBy
+RETURN 0
+
+-- [V20190625.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_BrokerBin_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE PROCEDURE [dbo].[SP_BrokerBin_GridView]
+	@BrokerId int = 0,
+	@BrokerIdTemp int = 0
+AS
+	SELECT 
+		Bro.Id,
+		Bro.BrokerId,
+		Bro.AccountNumber as AccountNum,
+		Bro.Code,
+		Bro.CurrencyCode,
+		Bro.Status,
+		Bro.CreatedAt,
+		Bro.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy
+	FROM BrokerBin Bro
+	LEFT JOIN AspNetUsers CR ON CR.Id = Bro.CreatedBy
+	LEFT JOIN AspNetUsers M ON M.Id = Bro.ModifiedBy
+	WHERE @BrokerId = Bro.BrokerId
+	UNION
+	SELECT 
+		Bro.Id,
+		Bro.BrokerId,
+		Bro.AccountNumber as AccountNum,
+		Bro.Code,
+		Bro.CurrencyCode,
+		Bro.Status,
+		Bro.CreatedAt,
+		Bro.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy
+	FROM BrokerBinTemp Bro
+	LEFT JOIN AspNetUsers CR ON CR.Id = Bro.CreatedBy
+	LEFT JOIN AspNetUsers M ON M.Id = Bro.ModifiedBy
+	WHERE @BrokerIdTemp = Bro.BrokerId
+RETURN 0
+
+-- [V20190625.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_ApproveReject]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Client_ApproveReject]
+	@ClientId varchar(max),
+	@Type int=1,
+	@CreatedBy varchar(50),
+	@StatusClient varchar(2),
+	@StatusVirtualAccount varchar(2),
+	@StatusClientVA varchar(2)
+as
+Begin Transaction 
+begin try
+	
+	declare 
+		@BrokerId varchar(5)
+			select @BrokerId=BrokerId from CustomerUser where UserId=@CreatedBy
+
+	if @Type = 1
+	begin
+	
+		insert into Client (
+			 Id ,Code ,ParentCode ,GroupCode ,IndustryId ,BranchLocCode ,Name ,Email1 ,Email2 ,CountryCode 
+			,CityCode ,Phone ,IsHeadOffice ,Status ,CreatedAt ,CreatedBy ,ModifiedAt ,ModifiedBy ,BrokerId, IsInsurance
+		)
+		select 
+			ClientId,Code,ParentCode,GroupCode,IndustryId,BranchLocCode,Name,
+			Email1,Email2,CountryCode,CityCode,Phone,IsHeadOffice,@StatusClient,GETDATE(),
+			@CreatedBy,GETDATE(),@CreatedBy,@BrokerId,0
+		from ClientTemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,',') where Data not in (select Id from Client))
+
+		insert into VirtualAccount (Id,Code,CurrencyCode,Bin,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,ClientNumber,Balanced,BrokerId)
+		select 
+			VirtualAccountId,Code,CurrencyCode,Bin,@StatusVirtualAccount,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,ClientNumber,Balanced,@BrokerId
+		from VirtualAccountTemp where VirtualAccountId in (select VirtualNumberId from ClientVATemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,',')))
+	
+		insert into ClientVA (Id,ClientId,VirtualNumberId,Status)
+		select ClientVAId,ClientId,VirtualNumberId,@StatusClientVA from ClientVATemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,','))
+		
+		
+		if exists (select Data from dbo.fnSplitString(@ClientId,',') where Data in (select Id from Client))
+		begin
+			UPDATE a SET
+				a.Code = b.Code,
+				a.GroupCode = b.GroupCode,
+				a.BranchLocCode=b.BranchLocCode,
+				a.Name=b.Name,
+				a.Email1=b.Email1,
+				a.Email2=b.Email2,
+				a.CountryCode=b.CountryCode,
+				a.CityCode=b.CityCode,
+				a.IsHeadOffice=b.IsHeadOffice,
+				a.Status=@StatusClient,
+				a.ModifiedAt=GETDATE(),
+				a.ModifiedBy=@CreatedBy,
+				a.BrokerId=@BrokerId
+			FROM Client a
+			INNER Join ClientTemp b on a.Id=b.ClientId 
+			WHERE a.Id in (select Data from dbo.fnSplitString(@ClientId,',') where Data in (select Id from Client))
+		end
+	end
+
+	update a set 
+		a.ClientNumber=b.Code
+	from VirtualAccount a 
+	left join (
+		select a.Code,c.Id from Client a 
+		left join ClientVA b on a.Id=b.ClientId
+		left join VirtualAccount c on b.VirtualNumberId=c.Id
+		where c.Id in (select Id from VirtualAccount where Id in (select VirtualNumberId from ClientVA where ClientId in (select Data from dbo.fnSplitString(@ClientId,','))))
+	)b on a.Id=b.Id
+	where a.Id in (select Id from VirtualAccount where Id in (select VirtualNumberId from ClientVA where ClientId in (select Data from dbo.fnSplitString(@ClientId,','))))
+
+	delete ClientTemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,','))
+	delete VirtualAccountTemp where VirtualAccountId in (select VirtualNumberId from ClientVATemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,',')))
+	delete ClientVATemp where ClientId in (select Data from dbo.fnSplitString(@ClientId,','))
+
+	select '1'
+	
+	Commit tran
+End Try
+Begin Catch
+    Rollback  
+    Declare @Msg nvarchar(max)	
+    Select @Msg=Error_Message();
+    --RaisError('Error Occured: %s', 20, 101,@Msg) With Log;
+	select @Msg
+End Catch
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_DeleteData]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Client_DeleteData] 
+	@ClientId varchar(50)
+as
+begin
+	if exists (select 1 from ClientTemp where ClientId=@ClientId)
+	begin
+		if exists (select 1 from ClientVATemp where ClientId=@ClientId)
+		begin
+			delete VirtualAccountTemp where VirtualAccountId in (select VirtualNumberId from ClientVATemp where ClientId=@ClientId)
+		end
+		delete ClientVATemp where ClientId=@ClientId
+		delete ClientTemp where ClientId=@ClientId
+
+		select 1
+	end
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_EditData]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROC [dbo].[SP_Client_EditData]
+--declare 
+	@Id uniqueidentifier,
+	@ClientID uniqueidentifier,
+	@TempType varchar(2),
+	@Code varchar(12),
+	@GroupCode varchar(20),
+	@BranchLocCode varchar(5),
+	@Name varchar(50),
+	@Email1 varchar(100),
+	@Email2 varchar(100),
+	@CountryCode varchar(20),
+	@CityCode varchar(20),
+	@Status varchar(2),
+	@CreatedBy uniqueidentifier,
+	@BrokerId int,
+	@IsSuperUser int
+as
+begin
+	if @IsSuperUser = 1
+	begin
+		if exists (select 1 from Client where Id=@ClientID)
+		begin
+			update Client set 
+				ParentCode='',
+				GroupCode=@GroupCode,
+				IndustryId=0,
+				BranchLocCode=@BranchLocCode,
+				Name=@Name,
+				Email1=@Email1,
+				Email2=@Email2,
+				CountryCode=@CountryCode,
+				CityCode=@CityCode,
+				Phone='000000',
+				IsHeadOffice=0,
+				Status=@Status,
+				ModifiedAt=GETDATE(),
+				ModifiedBy=@CreatedBy,
+				BrokerId=@BrokerId
+			where Id=@ClientID
+		end
+		else
+		begin
+			insert into Client (
+				Id,Code,ParentCode,GroupCode,IndustryId,BranchLocCode,Name,Email1,Email2,CountryCode,
+				CityCode,Phone,IsHeadOffice,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,BrokerId
+			)
+			select @ClientID,@Code,'',@GroupCode,0,@BranchLocCode,@Name,@Email1,@Email2,@CountryCode,
+			@CityCode,'000000',0,@Status,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,@BrokerId
+		end
+
+		delete ClientTemp where ClientId=@ClientID
+	end
+	else
+	begin
+		if exists (select 1 from ClientTemp where ClientId=@ClientID)
+		begin
+			update ClientTemp set 
+				TempType=@TempType,
+				GroupCode=@GroupCode,
+				BranchLocCode=@BranchLocCode,
+				Name=@Name,
+				Email1=@Email1,
+				Email2=@Email2,
+				CountryCode=@CountryCode,
+				CityCode=@CityCode,
+				Phone='000000',
+				IsHeadOffice=0,
+				Status=@Status,
+				ModifiedAt=GETDATE(),
+				ModifiedBy=@CreatedBy,
+				BrokerId=@BrokerId
+			where ClientId=@ClientID
+		end
+		else
+		begin
+			insert into ClientTemp (
+				Id,ClientId,TempType,Code,ParentCode,GroupCode,IndustryId,BranchLocCode,Name,Email1,Email2,CountryCode,
+				CityCode,Phone,IsHeadOffice,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,BrokerId
+			)
+			select @Id,@ClientID,@TempType,@Code,'',@GroupCode,0,@BranchLocCode,@Name,@Email1,@Email2,@CountryCode,
+			@CityCode,'000000',0,@Status,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,@BrokerId
+		end
+	end
+	select 1
+end
+
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_EditData_VA]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROC [dbo].[SP_Client_EditData_VA]
+--declare
+	@Id uniqueidentifier,
+	@VirtualAccountId  uniqueidentifier,
+	@TempType varchar(2),
+	@Code varchar(12),
+	@CurrencyCode varchar(5),
+	@Bin varchar(5),
+	@Status varchar(5),
+	@CreatedBy uniqueidentifier,
+	@ClientNumber varchar(20),
+	@ClientId uniqueidentifier,
+	@ClientTempId uniqueidentifier,
+	@BrokerId int,
+	@IsSuperUser int
+
+as
+begin
+	if @IsSuperUser=1
+	begin
+		if not exists (select 1 from VirtualAccount where Id=@VirtualAccountId)
+		begin
+			insert VirtualAccount (Id,Code,CurrencyCode,Bin,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,ClientNumber,BrokerId)
+			select @VirtualAccountId,@Code,@CurrencyCode,@Bin,@Status,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,@ClientNumber,@BrokerId
+
+			insert into ClientVA 
+			select NEWID(),@ClientId,@VirtualAccountId,@Status
+		end
+		delete VirtualAccountTemp where VirtualAccountId=@VirtualAccountId
+		delete ClientVATemp where ClientId=@ClientId and VirtualNumberId=@VirtualAccountId and ClientTempId=@ClientTempId
+
+	end
+	else
+	begin
+		if exists (select 1 from VirtualAccountTemp where VirtualAccountId=@VirtualAccountId)
+		begin
+			update VirtualAccountTemp set 
+				Bin=@Bin,
+				Code=@Code,
+				ModifiedBy=@CreatedBy,
+				ModifiedAt=GETDATE(),
+				CurrencyCode=@CurrencyCode
+			where VirtualAccountId=@VirtualAccountId
+		end
+		else
+		begin
+			insert into VirtualAccountTemp (
+				Id,VirtualAccountId,TempType,Code,CurrencyCode,Bin,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,
+				ClientNumber,BrokerId
+			)
+			select @Id,@VirtualAccountId,@TempType,@Code,@CurrencyCode,@Bin,@Status,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,
+			@ClientNumber,@BrokerId
+
+			insert into ClientVATemp 
+			select NEWID(),NEWID(),@TempType,@ClientTempId,@ClientId,@VirtualAccountId,@Status
+		end	
+	end
+	select 1
+end
+
+
+
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_GetDataPerClients]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Client_GetDataPerClients]
+	@ClientID varchar(50)
+as
+begin
+	select 
+		Id,
+		ClientId,
+		Code ClientNumber,
+		ParentCode HeadOfficeName,
+		GroupCode, CAST(IndustryId as bigint) Industry,BranchLocCode Branch,
+		Name,Email1,isnull(Email2,'')Email2,
+		CountryCode,CityCode,cast(IsHeadOffice as bit)IsHeadOffice,Status 
+	from ClientTemp where ClientId=@ClientID 
+	union 
+	select 
+		NUll,Id,Code,ParentCode HeadOfficeName,GroupCode,CAST(IndustryId as bigint),BranchLocCode,Name,Email1,
+		isnull(Email2,'')Email2,CountryCode,CityCode,IsHeadOffice,Status from Client where Id=@ClientID
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_GetListClientVA]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Client_GetListClientVA]
+	@ClientID varchar(50)
+as
+begin
+	select 
+		b.ClientId ClientIdVA,a.CurrencyCode Currency,a.Bin,a.Code VANumber,
+		b.Status,b.VirtualNumberId,CAST(0 as bit) IsEdit
+	from VirtualAccountTemp a 
+	left join ClientVATemp b on a.VirtualAccountId=b.VirtualNumberId
+	where ClientId=@ClientID
+	union
+	select 
+		b.ClientId,a.CurrencyCode,a.Bin,a.Code,b.Status,VirtualNumberId ,CAST(1 as bit)
+	from VirtualAccount a 
+	left join ClientVA b on a.Id=b.VirtualNumberId
+	where ClientId=@ClientID
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_ListData]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE 
+PROC [dbo].[SP_Client_ListData]
+	@BrokerId varchar(5) =null
+as
+begin
+	select * into #Data from (
+		select *,
+			case 
+				when a.Status = 'DR' then 'Draft'
+				when a.Status = 'NA' then 'Waiting for Approval'
+			else 'Approved' end StatusData,
+			ROW_NUMBER() OVER(Partition by ClientId ORDER BY ModifiedAt DESC) AS RowPart
+		from (
+			select * from ClientTemp WITH(NOLOCK)
+			where InsuranceId = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER)
+			union
+			select 
+				null,Id,null,Code,
+				ParentCode,GroupCode,
+				IndustryId,
+				BranchLocCode,
+				Name,
+				Email1,
+				Email2,
+				CountryCode,
+				CityCode,
+				Phone,
+				IsHeadOffice,
+				Status,
+				CreatedAt,
+				CreatedBy,
+				ModifiedAt,
+				ModifiedBy,
+				BrokerId,
+				IsInsurance,
+				InsuranceId
+			from Client WITH(NOLOCK)
+			where InsuranceId = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER)
+		)a
+	)a where RowPart=1 
+
+
+	declare 
+		@sql varchar(max) = '
+		select 
+			ClientId,
+			ISNULL(a.Code,'''') ClientNumber,
+			ISNULL(a.Name,'''') ClientName,
+			ISNULL(GroupCode,'''') GroupCode,
+			Email1 + isnull('' ; ''+ Email2,'''') Email,
+			isnull(b.Name,isnull(a.CountryCode,'''')) Country,
+			isnull(a.CityCode,'''') CityCode,
+			a.Status,
+			a.StatusData,
+			c.UserName CreatedBy,
+			d.UserName ModifiedBy,
+			a.CreatedAt,
+			a.ModifiedAt,
+			e.Name as BrokerName
+		from #Data a
+		left join  Country b on a.CountryCode=b.Code
+		LEFT JOIN AspNetUsers c WITH(NOLOCK) ON a.CreatedBy = c.Id
+		LEFT JOIN AspNetUsers d WITH(NOLOCK) ON d.Id = a.ModifiedBy
+		LEFT JOIN Broker e ON e.Id = a.BrokerId
+		where 1=1 
+	'
+	if @BrokerId != 0
+	begin
+		set @sql += ' and a.BrokerId = '+@BrokerId+''
+	end
+
+	set @sql += ' order by ModifiedAt desc'
+	
+	print(@sql)
+	exec(@sql)
+
+	drop table #Data
+	return 0
+end
+-- VERSION [20191220.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Client_Template]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Client_Template]
+as
+begin
+	select  
+		'PAG' [Entity / Branch],
+		'Client001' [Client Number],
+		'Client 001' [Client Name],
+		cast(1 as bit)  [Parent Company],
+		'Group001'  [Group],
+		'example@email.com' Email1,
+		null Email2,
+		'IDN' Country,
+		'Jakarta' City
+
+	select 
+		'Client001' [Client Number],
+		'IDR' Currency,
+		'0000' Bin,
+		'000000000000' [VA Number]
+
+	select Code [Country Code],Name [Country Name] from Country where Status=1
+	select Code [Brach Code],Name [Branch Name] from BranchLoc
+	select Code [Currency Code],Name [Currency Name] from Currency
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_CopyUserProfile]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_CopyUserProfile]
+	@ProfileId int,
+	@BrokerId int,
+	@UID uniqueidentifier
+AS
+	DECLARE @newPID int = IDENT_CURRENT('ProfileTemp') + IDENT_INCR('ProfileTemp')
+
+	BEGIN
+
+	SET IDENTITY_INSERT [ProfileTemp] ON
+	INSERT [ProfileTemp] (Id, ProfileId, TempType, Name, BrokerId, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, [Status]) 
+	SELECT 
+		@newPID,
+		null,
+		'I',
+		CONCAT(Name, '_Copy'),
+		@BrokerId,
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'WA'
+	FROM [Profile] WHERE Id = @ProfileId
+	SET IDENTITY_INSERT [ProfileTemp] OFF
+
+	INSERT INTO GroupProfileTemp(
+		Id,
+		TempType,
+		GroupProfileId,
+		MenuId,
+		ProfileId,
+		[Read],
+		[Create],
+		[Update],
+		[Delete],
+		[Approve],
+		CreatedAt,
+		CreatedBy,
+		ModifiedAt,
+		ModifiedBy,
+		[Status]
+	)
+	SELECT 
+		NEWID(),
+		'I',
+		(SELECT CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER)),
+		MenuId,
+		@newPID,
+		[Read], 
+		[Create], 
+		[Update], 
+		[Delete], 
+		[Approve],
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'WA' 
+	FROM GroupProfile GP
+	WHERE GP.ProfileId = @ProfileId
+
+	END
+	 
+RETURN 1
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_CreateDefaultGroupAccessRole]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_CreateDefaultGroupAccessRole]
+	@BrokerId int,
+	@UID uniqueidentifier
+AS
+		DECLARE @newPID int = IDENT_CURRENT('Profile') + IDENT_INCR('Profile')
+
+	SET IDENTITY_INSERT [Profile] ON
+
+	INSERT [Profile] (Id, Name, BrokerId, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, [Status]) 
+	VALUES (
+		@newPID,
+		'Creator',
+		@BrokerId,
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'A' )
+
+	INSERT INTO GroupProfile (
+		Id,
+		MenuId,
+		ProfileId,
+		[Read],
+		[Create],
+		[Update],
+		[Delete],
+		[Approve],
+		CreatedAt,
+		CreatedBy,
+		ModifiedAt,
+		ModifiedBy,
+		Status
+	)
+	SELECT 
+		NEWID(),
+		MenuId,
+		@newPID,
+		[Read], 
+		[Create], 
+		[Update], 
+		[Delete], 
+		[Approve],
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		Status 
+	FROM GroupProfile GP
+	WHERE GP.ProfileId = -1 --Maker
+
+	set @newPID = IDENT_CURRENT('Profile') + IDENT_INCR('Profile')
+
+	INSERT [Profile] (Id, Name, BrokerId, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, [Status]) 
+	VALUES (
+		@newPID,
+		'Approver',
+		@BrokerId,
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'A' )
+
+	INSERT INTO GroupProfile (
+		Id,
+		MenuId,
+		ProfileId,
+		[Read],
+		[Create],
+		[Update],
+		[Delete],
+		[Approve],
+		CreatedAt,
+		CreatedBy,
+		ModifiedAt,
+		ModifiedBy,
+		Status
+	)
+	SELECT 
+		NEWID(),
+		MenuId,
+		@newPID,
+		[Read], 
+		[Create], 
+		[Update], 
+		[Delete], 
+		[Approve],
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		Status 
+	FROM GroupProfile GP
+	WHERE GP.ProfileId = -2 -- Checker
+
+	set @newPID = IDENT_CURRENT('Profile') + IDENT_INCR('Profile')
+
+	INSERT [Profile] (Id, Name, BrokerId, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, [Status]) 
+	VALUES (
+		@newPID,
+		'Super User',
+		@BrokerId,
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'A' )
+
+	INSERT INTO GroupProfile (
+		Id,
+		MenuId,
+		ProfileId,
+		[Read],
+		[Create],
+		[Update],
+		[Delete],
+		[Approve],
+		CreatedAt,
+		CreatedBy,
+		ModifiedAt,
+		ModifiedBy,
+		Status
+	)
+	SELECT 
+		NEWID(),
+		MenuId,
+		@newPID,
+		[Read], 
+		[Create], 
+		[Update], 
+		[Delete], 
+		[Approve],
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		Status 
+	FROM GroupProfile GP
+	WHERE GP.ProfileId = -3 -- Super User
+
+	set @newPID = IDENT_CURRENT('Profile') + IDENT_INCR('Profile')
+
+	INSERT [Profile] (Id, Name, BrokerId, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, [Status]) 
+	VALUES (
+		@newPID,
+		'Policy Number Uploader',
+		@BrokerId,
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		'A' )
+	SET IDENTITY_INSERT [Profile] OFF
+
+	INSERT INTO GroupProfile (
+		Id,
+		MenuId,
+		ProfileId,
+		[Read],
+		[Create],
+		[Update],
+		[Delete],
+		[Approve],
+		CreatedAt,
+		CreatedBy,
+		ModifiedAt,
+		ModifiedBy,
+		Status
+	)
+	SELECT 
+		NEWID(),
+		MenuId,
+		@newPID,
+		[Read], 
+		[Create], 
+		[Update], 
+		[Delete], 
+		[Approve],
+		GETDATE(),
+		@UID,
+		GETDATE(),
+		@UID,
+		Status 
+	FROM GroupProfile GP
+	WHERE GP.ProfileId = -4 -- Insurer
+	 
+RETURN 0
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_CustomerEmailTemplate_List]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+-- CODE HERE --
+CREATE PROC [dbo].[SP_CustomerEmailTemplate_List]
+
+AS
+-- cb Wesly, 11 Dec 2020
+BEGIN
+	SELECT *
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'NA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'D'
+				THEN 'Non Active'
+			ELSE 'Approved'
+			END StatusData
+		,CASE 
+			WHEN a.Category = 1
+				THEN 'System'
+			WHEN a.Category = 2
+				THEN 'Customer-Client'
+			ELSE 'System'
+			END EmailCategory
+		,CASE 
+			WHEN a.isEdit = 0
+				THEN 'No'
+			ELSE 'Yes'
+			END Editable
+		,ROW_NUMBER() OVER (
+			PARTITION BY EmailTemplateId ORDER BY ModifiedAt DESC
+			) AS RowPart
+		,CASE 
+			WHEN len(Content) > 30
+				THEN LEFT(CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)'), 30) + ' ... More'
+			ELSE CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)')
+			END BodyEmail
+		,CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') BodyExport
+	INTO #data
+	FROM (
+		SELECT *
+		FROM CustomerEmailTemplateTemp
+		
+		UNION
+		
+		SELECT ANU.UserName
+			,CET.Id
+			,NULL
+			,Name
+			,Subject
+			,Content
+			,STATUS
+			,CreatedAt
+			,CreatedBy
+			,ModifiedAt
+			,ModifiedBy
+			,isEdit
+			,Category
+			,EventName
+		FROM CustomerEmailTemplate CET left join AspNetUsers ANU on CET.CreatedBy = ANU.Id
+		) a
+
+	SELECT (
+			SELECT UserName
+			FROM AspNetUsers
+			WHERE Id = CreatedBy
+			) CreatedByUser
+		,(
+			SELECT UserName
+			FROM AspNetUsers
+			WHERE Id = ModifiedBy
+			) ModifiedByUser
+		,*
+	FROM #data
+	WHERE RowPart = 1
+
+	DROP TABLE #data
+END
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_CustomerUserAccess_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[SP_CustomerUserAccess_GridView]
+
+	@BrokerId int
+
+AS
+
+
+
+BEGIN
+
+
+
+declare @UserBroker table (
+
+	ID uniqueidentifier,
+
+	BrokerId int,
+
+	BrokerName varchar(100),
+
+	ProfileID int,
+
+	ProfileName varchar(100),
+
+	Email varchar(max),
+
+	UserID varchar(60),
+
+	UserName varchar(60),
+
+	AspID uniqueidentifier null,
+
+	CreatedAt datetime,
+
+	ModifiedAt datetime,
+
+	CreatedBy varchar(60),
+
+	ModifiedBy varchar(60),
+
+	[Status] varchar(2),
+
+	PhoneNumber varchar(max),
+
+	UserCategory nvarchar(50),
+
+	[Type] int null
+
+)
+
+
+
+BEGIN
+
+
+
+	insert into @UserBroker
+
+	SELECT
+
+		CU.Id as ID,
+
+		isnull(B.Id,0) as BrokerId,
+
+		ISNULL(B.Name,'Bank') as BrokerName,
+
+		ISNULL(P.Id, 0) as ProfileID,
+
+		ISNULL(P.Name,'-') as ProfileName,
+
+		ISNULL(U.Email,'-') as Email,
+
+		ISNULL(U.UserID,'-') as UserID,
+
+		ISNULL(U.UserName,'-') as UserName,
+
+		--CONVERT(uniqueidentifier, ISNULL(U.Id, NEWID())) as UserId,
+
+		CONVERT(uniqueidentifier,U.Id) as AspID,
+
+		CU.CreatedAt as CreatedAt,
+
+		CU.ModifiedAt as ModifiedAt,
+
+		CR.UserName as CreatedBy,
+
+		M.UserName as ModifiedBy,
+
+		CU.Status as [Status],
+
+		ISNULL(U.PhoneNumber,'-') as PhoneNumber,
+
+		ISNULL(p.UserCategory,'-') as UserCategory,
+
+		1 as [Type]
+
+	FROM CustomerUser CU
+
+	LEFT JOIN Customer B ON B.Id = CU.BrokerId
+
+	LEFT JOIN AspNetUsers U ON U.Id = CU.UserId
+
+	LEFT JOIN ProfileMember PM ON PM.UserId = CU.UserId 
+
+	LEFT JOIN [Profile] P ON P.Id = PM.ProfileId 
+
+	LEFT JOIN AspNetUsers CR ON CR.Id = CU.CreatedBy
+
+	LEFT JOIN AspNetUsers M ON M.Id = CU.ModifiedBy
+
+	WHERE CU.Id not in (SELECT UserBrokerId FROM CustomerUserTemp )  and B.Id <> 0
+	AND B.Id=@BrokerId AND PM.ProfileId <> (select TOP 1 Id from Profile where Name LIKE '%A/P Counterpart%')
+	and CU.BrokerId <> 0 AND CU.Status in ('A','L')
+	UNION
+
+	SELECT
+
+		CU.Id as ID,
+
+		isnull(B.Id,0) as BrokerId,
+
+		ISNULL(B.Name,'Bank') as BrokerName,
+
+		ISNULL(P.Id, 0) as ProfileID,
+
+		ISNULL(P.Name,'-') as ProfileName,
+
+		--ISNULL(Claim.Email, U.Email) as Email,
+		ISNULL(U.Email,'-') as Email,
+
+		ISNULL(U.UserID,'-') as UserID,
+
+		ISNULL(U.UserName,'-') as UserName,
+
+		CONVERT(uniqueidentifier,U.Id) as AspID,
+
+		--CONVERT(uniqueidentifier, ISNULL(U.Id, NEWID())) as UserId,
+
+		CU.CreatedAt as CreatedAt,
+		--main.CreatedAt as CreatedAt,
+
+		main.ModifiedAt as ModifiedAt,
+
+		CR.UserName as CreatedBy,
+		
+		M.UserName as ModifiedBy,
+
+		CU.Status as [Status],
+
+		ISNULL(U.PhoneNumber,'-') as PhoneNumber,
+
+		ISNULL(p.UserCategory,'-') as UserCategory,
+
+		2 as [Type]
+
+	FROM CustomerUserTemp CU
+
+	
+
+	LEFT JOIN Customer B ON CU.BrokerId = B.Id
+
+	LEFT JOIN AspNetUsers U ON U.Id = CU.UserId
+
+	--LEFT JOIN ProfileMemberTemp PM ON PM.UserId = CU.UserId AND PM.TempType <>'D'
+	LEFT JOIN ProfileMember PM ON PM.UserId = CU.UserId 
+	LEFT JOIN [Profile] P ON P.Id = PM.ProfileId 
+
+	--LEFT JOIN AspNetUsers CR ON CR.Id = CU.CreatedBy
+
+	LEFT JOIN AspNetUsers M ON M.Id = CU.ModifiedBy
+
+	LEFT JOIN CustomerUser main on main.Id=cu.UserBrokerId
+	LEFT JOIN AspNetUsers CR ON CR.Id = main.CreatedBy
+	--OUTER APPLY (SELECT TOP 1 ClaimValue as Email FROM AspNetUserClaims WHERE UserId = CU.UserId) as Claim
+
+	WHERE CU.Status = 'WA' and CU.BrokerId <> 0 AND PM.ProfileId <> (select TOP 1 Id from Profile where Name LIKE '%Counterpart%')
+
+
+
+	select * from @UserBroker
+
+END
+
+
+
+IF @BrokerId = 0
+
+	BEGIN
+
+
+
+	SELECT * FROM @UserBroker
+
+
+
+	END
+
+ELSE
+
+
+
+	BEGIN
+
+
+
+	SELECT * FROM @UserBroker where BrokerId = @BrokerId
+
+
+
+	END
+
+
+
+END
+
+
+
+RETURN 0
+GO
+/****** Object:  StoredProcedure [dbo].[SP_CustomerUserAccessTemp_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [dbo].[SP_CustomerUserAccessTemp_GridView]
+	@BrokerId int
+AS
+
+BEGIN
+
+declare @UserBroker table (
+	ID uniqueidentifier,
+	BrokerId int,
+	BrokerName varchar(100),
+	ProfileID int,
+	ProfileName varchar(100),
+	Email varchar(max),
+	UserID varchar(60),
+	UserName varchar(60),
+	AspID uniqueidentifier null,
+	CreatedAt datetime,
+	ModifiedAt datetime,
+	CreatedBy varchar(60),
+	ModifiedBy varchar(60),
+	[Status] varchar(2),
+	PhoneNumber varchar(max),
+	UserCategory nvarchar(50),
+	[Type] int null,
+	Comment  nvarchar(max)
+
+)
+
+BEGIN
+
+
+	insert into @UserBroker
+
+	SELECT
+
+		CU.Id as ID,
+		isnull(B.Id,0) as BrokerId,
+		ISNULL(B.Name,'Bank') as BrokerName,
+		ISNULL(P.Id, 0) as ProfileID,
+		ISNULL(P.Name,'') as ProfileName,
+		U.Email as Email,--ISNULL(Claim.Email, U.Email) as Email,
+		U.UserID as UserID,
+		U.UserName as UserName,
+		CONVERT(uniqueidentifier,U.Id) as AspID,
+		CU.CreatedAt as CreatedAt,
+		CU.ModifiedAt as ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy,
+		CU.Status as [Status],
+		
+		U.PhoneNumber as PhoneNumber,
+		p.UserCategory as UserCategory,
+		2 as [Type],
+		CU.Comment as Comment
+	FROM CustomerUserTemp CU
+
+	LEFT JOIN Customer B ON CU.BrokerId = B.Id
+	LEFT JOIN AspNetUsers U ON U.Id = CU.UserId
+	LEFT JOIN ProfileMemberTemp PM ON PM.UserId = CU.UserId AND PM.CustomerUserTempId=CU.Id
+	LEFT JOIN [Profile] P ON P.Id = PM.ProfileId 
+	LEFT JOIN AspNetUsers CR ON CR.Id = CU.CreatedBy
+	LEFT JOIN AspNetUsers M ON M.Id = CU.ModifiedBy
+	OUTER APPLY (SELECT TOP 1 ClaimValue as Email FROM AspNetUserClaims WHERE UserId = CU.UserId) as Claim
+	WHERE CU.BrokerId <> 0 
+	--AND pm.TempType<>'D'
+
+	select * from @UserBroker
+
+
+
+END
+
+
+
+
+
+
+
+IF @BrokerId = 0
+
+
+
+	BEGIN
+
+
+
+
+
+
+
+	SELECT * FROM @UserBroker
+
+
+
+
+
+
+
+	END
+
+
+
+ELSE
+
+
+
+
+
+
+
+	BEGIN
+
+
+
+
+
+
+
+	SELECT * FROM @UserBroker where BrokerId = @BrokerId
+
+
+
+
+
+
+
+	END
+
+
+
+
+
+
+
+END
+
+
+
+
+
+
+
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_EmailTemplate_ApproveReject]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_EmailTemplate_ApproveReject]
+	@EmailTemplateId varchar(max),
+	@Type int,
+	@CreatedBy varchar(50),
+	@StatusEmailTemplate varchar(2)
+as
+Begin Transaction 
+begin try
+	if @Type = 1
+	begin
+	
+		insert into EmailTemplate
+		select 
+			EmailTemplateId,
+			Name,
+			Subject,
+			Content,
+			@StatusEmailTemplate,
+			GETDATE(),
+			@CreatedBy,
+			GETDATE(),
+			@CreatedBy
+		from EmailTemplateTemp where EmailTemplateId in (select Data from dbo.fnSplitString(@EmailTemplateId,',') where Data not in (select Id from EmailTemplate))
+
+		if exists (select Data from dbo.fnSplitString(@EmailTemplateId,',') where Data in (select Id from EmailTemplate))
+		begin
+			UPDATE a SET
+				a.Name = b.Name,
+				a.Subject = b.Subject,
+				a.Content=b.Content,
+				a.Status=@StatusEmailTemplate,
+				a.ModifiedAt=GETDATE(),
+				a.ModifiedBy=@CreatedBy
+			FROM EmailTemplate a
+			INNER Join EmailTemplateTemp b on a.Id=b.EmailTemplateId 
+			WHERE a.Id in (select Data from dbo.fnSplitString(@EmailTemplateId,',') where Data in (select Id from EmailTemplate))
+		end
+	end
+
+	delete EmailTemplateTemp where EmailTemplateId in (select Data from dbo.fnSplitString(@EmailTemplateId,','))
+
+	select '1'
+	
+	Commit tran
+End Try
+Begin Catch
+    Rollback  
+    Declare @Msg nvarchar(max)	
+    Select @Msg=Error_Message();
+	select @Msg
+End Catch
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_EmailTemplate_Edit]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+-- CODE HERE --
+CREATE PROC [dbo].[SP_EmailTemplate_Edit]
+--declare
+	@Id varchar(50)
+as
+begin
+	--SELECT *,
+	--	case 
+	--		when a.Category = 1 then 'System'
+	--		when a.Category = 2 then 'Customer-Client'
+	--		else 'System'
+	--	end EmailCategory,
+	--	ROW_NUMBER() OVER(Partition by EmailTemplateId ORDER BY ModifiedAt DESC) AS RowPart
+	--into #data from (
+	--	select Id, EmailTemplateId, TempType,Name,Subject,Content,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,isEdit,Category,Event,Description, 1 as Type from EmailTemplateTemp 
+	--	UNION
+	--	select null,Id,null,Name,Subject,Content,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,isEdit,Category,Event,Description, 2 as Type from EmailTemplate
+	--)a
+	--SELECT 
+	--	Content,Subject,Name Name,EmailTemplateId Id,Status,
+	--	Category,isEdit,EmailCategory,Event,Description 
+	--from #data 
+	--where RowPart=1 
+	--and EmailTemplateId=@Id
+	--drop table #data
+
+	declare @EmailTemplateList table (
+		ID uniqueidentifier,
+		[Event] nvarchar(100),
+		[Name] varchar(100),
+		[Description] nvarchar(255),
+		[Subject] nvarchar(100),
+		Content nvarchar(max),
+		isEdit bit,
+		Status varchar(100),
+		[Type] int
+	)
+	BEGIN
+		insert into @EmailTemplateList
+		select 
+			Id,Event,Name,Description,Subject,Content,isEdit,Status, 1 as Type 
+		from EmailTemplate
+		union
+		select 
+			Id,Event,Name,Description,Subject,Content,isEdit,Status, 2 as Type 
+		from EmailTemplateTemp
+		end
+	END
+
+	BEGIN 
+	SELECT * FROM @EmailTemplateList
+	where ID = @Id
+	END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_EmailTemplate_List]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- CODE HERE --
+CREATE PROC [dbo].[SP_EmailTemplate_List]
+as
+begin
+	
+	select *,
+		case 
+			when a.Status = 'DR' then 'Draft'
+			when a.Status = 'NA' then 'Waiting for Approval'
+			when a.Status = 'D' then 'Non Active'
+			else 'Approved' 
+		end StatusData,
+		case 
+			when a.Category = 1 then 'System'
+			when a.Category = 2 then 'Customer-Client'
+			else 'System'
+		end EmailCategory,
+		case
+			when a.isEdit = 0 then 'No'
+			else 'Yes'
+		end Editable,
+		ROW_NUMBER() OVER(Partition by EmailTemplateId ORDER BY ModifiedAt DESC) AS RowPart,
+		case 
+			when len(Content) >30 then LEFT(CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)'),30)+' ... More'
+			else CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') 
+		end BodyEmail,
+		CAST(REPLACE(REPLACE(Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') BodyExport
+	into #data from (
+		select * from EmailTemplateTemp 
+		UNION
+		select null,Id,null,Name,Subject,Content,Status,CreatedAt,CreatedBy,ModifiedAt,ModifiedBy,isEdit,Category
+		from EmailTemplate 
+	)a
+	select
+		(select UserName from AspNetUsers where Id=CreatedBy) CreatedByUser, 
+		(select UserName from AspNetUsers where Id=ModifiedBy) ModifiedByUser, 
+		*
+	from #data where RowPart=1
+	drop table #data
+end
+-- END CODE HERE --
+-- VERSION [20190508.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_EmailTemplate_ListInfo]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- CODE HERE --
+CREATE Proc [dbo].[SP_EmailTemplate_ListInfo]
+	@Code varchar(50)='Invoice Settlement Confirmation'
+as
+begin
+	select * into #InfoTemplate   from (
+		select 'Email Verification' EmailTemplateCode,'1' Code,'A/P Counterpart Name' DescriptionField union
+		select 'Email Verification','2','A/R Counterpart Name' union
+		select 'Email Verification','3','Customer name' union
+		select 'Email Verification','4','Link Verification' union
+		select 'Email Verification','5','Link Rejection' union
+
+		select 'OTP notification','1','AP Counterpart User Name' union
+		select 'OTP notification','2','OTP' union
+
+		select 'AR OTP notification','1','AP Counterpart Name' union
+		select 'AR OTP notification','2','OTP' union
+
+		select 'Reset Password','1','AP Counterpart User Name' union
+		select 'Reset Password','2','Link Reset Password Screen' union
+
+		select 'Information of User Activation and Password Reset','1','AP Counterpart User Name' union
+		select 'Information of User Activation and Password Reset','2','Link MORE Website Landing Page' union
+
+		select 'Password Changed','1','AP Counterpart User Name' union
+		select 'Password Changed','2','Link MORE Website Landing Page' union
+
+		select 'Re-activation Access','1','Customer Name' union
+		select 'Re-activation Access','2','Link MORE Website Landing Page' union
+		select 'Re-activation Access','3','URL' union
+
+		select 'Registration Confirmation','1','Main AP Counterpart Name' union
+		select 'Registration Confirmation','2','Customer ID' union
+		select 'Registration Confirmation','3','Customer Name' union
+		select 'Registration Confirmation','4','User ID' union
+		select 'Registration Confirmation','5','User Name' union
+		select 'Registration Confirmation','6','Link MORE Website Landing Page' union
+		--select 'Registration Confirmation','7','Last Name' union
+		--select 'Registration Confirmation','8','URL' union
+
+		select 'Password Attachment Registration','1','AP Counterpart Name' union
+		select 'Password Attachment Registration','2','AR Counterpart Name' union
+		select 'Password Attachment Registration','3','Link Register Password Attachment Screen' union
+
+		select 'Refund Billing','1','AP Counterpart Name' union
+		select 'Refund Billing','2','Attachment Refund Billing' union
+		select 'Refund Billing','2','Customer Name' union
+
+		select 'Payment Notification AP','1','A/P Counterpart Name' union
+		select 'Payment Notification AP','2','Amount' union
+		select 'Payment Notification AP','3','Currency' union
+		select 'Payment Notification AP','4','Attachment Payment Notification (List column name & data - AP Output setup)' union
+		select 'Payment Notification AP','5','Customer Name' union
+
+		select 'A/P Counterpart Settlement Notification','1','Customer Name' union
+		select 'A/P Counterpart Settlement Notification','2','AP Counterpart Name' union
+
+		select 'Miscellaneous Payment Notification','1','AP Counterpart Name' union
+		select 'Miscellaneous Payment Notification','2','Attachment Miscellaneous' union
+		select 'Miscellaneous Payment Notification','3','Customer Name' union
+
+		select 'Automatic Payment Notification','1','A/P Counterpart Name' union
+		select 'Automatic Payment Notification','2','Amount' union
+		select 'Automatic Payment Notification','3','Currency' union
+		select 'Automatic Payment Notification','4','Attachment Payment Notification (List column name & data - AP Output setup)' union
+		select 'Automatic Payment Notification','3','Customer Name' union
+
+		select 'Invoice Billing','1','AR Counterpart Name'union
+		select 'Invoice Billing','2','Attachment Invoice Billing'union
+		select 'Invoice Billing','3','Customer Name'union
+
+		select 'Invoice Settlement Confirmation','1','AR Counterpart Name'union
+		select 'Invoice Settlement Confirmation','2','Amount'union
+		select 'Invoice Settlement Confirmation','2','Currency'union
+		select 'Invoice Settlement Confirmation','4','Link Online Confirmation'union
+		select 'Invoice Settlement Confirmation','5','Customer Name'union
+
+		select 'Payment Notification AR','1','AR Counterpart Name'union
+		select 'Payment Notification AR','2','Attachment Payment Notification'union
+		select 'Payment Notification AR','3','Customer Name'union
+
+		select 'Automatic Reconciliation Confirmation','1','AR Counterpart Name'union
+		select 'Automatic Reconciliation Confirmation','2','Customer Name'union
+		select 'Automatic Reconciliation Confirmation','3','Amount'union
+		select 'Automatic Reconciliation Confirmation','4','Currency'union
+		select 'Automatic Reconciliation Confirmation','5','Link Online Confirmation'union
+		select 'Automatic Reconciliation Confirmation','6','Customer Name'union
+
+		select 'Automatic Invoice Settlement Receipt','1','AR Counterpart Name'union
+		select 'Automatic Invoice Settlement Receipt','2','Amount'union
+		select 'Automatic Invoice Settlement Receipt','3','Currency'union
+		select 'Automatic Invoice Settlement Receipt','4','VA'union
+		select 'Automatic Invoice Settlement Receipt','5','Attachment invoice Settlement'union
+
+		select 'Invoice Settlement Receipt','1','AR Counterpart Name' union
+		select 'Invoice Settlement Receipt','2','Attachment Invoice Receipt'
+	) a
+
+
+	select * from #InfoTemplate where EmailTemplateCode=@Code order by EmailTemplateCode ,Code asc
+
+	drop table #InfoTemplate
+end
+-- END CODE HERE --
+-- VERSION [20190508.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_Approval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_ExchangeRate_Approval] 
+	@InsuranceId varchar(100),
+	@Type  int = 0 
+as
+begin
+	select ROW_NUMBER() over(order by Createdat asc)No,* Into #Data from ExchangeRateTemp where InsuranceId=@InsuranceId
+
+	declare 
+		@JmlData int = (select Count(*) from #Data),
+		@Row int =1,
+		@CurrencyCode varchar(10),
+		@OppositeCurrencyCode varchar(10)
+	if @JmlData > 0 
+	begin
+		while @JmlData >=@Row
+		begin
+			select @CurrencyCode=CurrencyCode,@OppositeCurrencyCode=OppositeCurrencyCode from #Data where No=@Row
+			if @Type = 1
+			begin
+				if exists (select 1 from ExchangeRate where InsuranceId=@InsuranceId and CurrencyCode=@CurrencyCode and OppositeCurrencyCode=@OppositeCurrencyCode and Status='C')
+				begin
+					update ExchangeRate set Status='-1' where InsuranceId=@InsuranceId and CurrencyCode=@CurrencyCode and OppositeCurrencyCode=@OppositeCurrencyCode and Status='C'
+				end
+				insert into ExchangeRate
+				select ExchangeRateId,InsuranceId,CurrencyCode,OppositeCurrencyCode,BuyValue,SellValue,MiddleValue,EffectiveAt,'1',GETDATE(),CreatedBy,GETDATE(),ModifiedBy from #Data where No=@Row
+			end
+			if @Type = 0
+			begin
+				if exists (select 1 from ExchangeRate where InsuranceId=@InsuranceId and CurrencyCode=@CurrencyCode and OppositeCurrencyCode=@OppositeCurrencyCode and Status='C')
+				begin
+					update ExchangeRate set Status='1' where InsuranceId=@InsuranceId and CurrencyCode=@CurrencyCode and OppositeCurrencyCode=@OppositeCurrencyCode and Status='C'
+				end 
+			end
+			set @Row=@Row+1
+		end
+		drop table #Data
+		delete ExchangeRateTemp where InsuranceId=@InsuranceId
+	end
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_GetHistory]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE Proc [dbo].[SP_ExchangeRate_GetHistory]
+	@DisplayLength int,
+	@DisplayStart int,
+	@SortCol varchar(10),
+	@SortDir nvarchar(10),
+	@Insurance varchar(100),
+	@Curency varchar(10),
+	@Opposite varchar(10)
+as
+begin
+	declare 
+		@FirstRec int,
+		@LastRec int
+		Set @FirstRec = @DisplayStart;
+		Set @LastRec = @DisplayStart + @DisplayLength;
+
+		with CTE_ExcRate as (
+			select 
+				cast(ROW_NUMBER() over(order by a.ModifiedAt desc) as bigint) RowNum,
+				cast(count(*)over() as bigint) TotalCount,
+				CurrencyCode +'-'+ b.Name CurrencyCode,
+				OppositeCurrencyCode +'-'+ c.Name OppositeCurrencyCode,
+				convert(varchar, cast(BuyValue as money),1) BuyValue,
+				convert(varchar, cast(SellValue as money),1) SellValue,
+				convert(varchar, cast(MiddleValue as money),1) MiddleValue,
+				CONVERT(varchar(10),EffectiveAt, 105) EffectiveDate,
+				case 
+					when a.Status='A' then 'Active'
+					when a.Status='NA' then 'Non Active'
+				end Status
+			from ExchangeRate a 
+			left join Currency b on a.CurrencyCode=b.Code
+			left join Currency c on a.OppositeCurrencyCode=c.Code
+			where InsuranceId=@Insurance and CurrencyCode=@Curency and OppositeCurrencyCode=@Opposite
+		) 
+		select * from CTE_ExcRate where RowNum > @FirstRec and RowNum <= @LastRec 
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_GetListDataExchangeRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE PROC [dbo].[SP_ExchangeRate_GetListDataExchangeRate]
+	@InsuranceId varchar(100)
+as
+begin
+	select * into #Data from (
+		select 
+			Id,
+			ExchangeRateId,
+			InsuranceId,
+			CurrencyCode,
+			OppositeCurrencyCode,
+			BuyValue,
+			SellValue,
+			MiddleValue,
+			convert(varchar(10),EffectiveAt, 103)EffectiveAt,
+			Status,
+			CreatedAt,
+			CreatedBy,
+			ModifiedAt,
+			ModifiedBy,
+			'Temp' TypeSource,
+			(select Name from Currency where Code=CurrencyCode) CurName,
+			(select Name from Currency where Code=OppositeCurrencyCode) OppName,
+			(Select Name from Insurance where Id=@InsuranceId) InsuranceNames
+		from ExchangeRateTemp where InsuranceId=@InsuranceId
+		union 
+		select 
+			Id,
+			Id ExchangeRateId,
+			InsuranceId ,
+			CurrencyCode,
+			OppositeCurrencyCode,
+			BuyValue,
+			SellValue,
+			MiddleValue,
+			convert(varchar(10),EffectiveAt, 103),
+			Status,
+			CreatedAt,
+			CreatedBy,
+			ModifiedAt,
+			ModifiedBy,
+			'Main' ,
+			(select Name from Currency where Code=CurrencyCode) CurName,
+			(select Name from Currency where Code=OppositeCurrencyCode) OppName,
+			(Select Name from Insurance where Id=@InsuranceId) InsuranceNames
+		from ExchangeRate where InsuranceId=@InsuranceId
+	)a where Status ='A'
+
+	select * from #Data order by CreatedAt desc
+
+	drop table #Data
+end
+-- END CODE HERE --
+-- VERSION [V20190515.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_Insert]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_ExchangeRate_Insert]
+	@InsuranceId varchar(100),
+    @CurrencyCode VARCHAR (20),
+    @OppositeCurrencyCode VARCHAR (20),
+    @BuyValue DECIMAL (18, 2),
+    @SellValue DECIMAL (18, 2),
+    @MiddleValue DECIMAL (18, 2),
+    @EffectiveAt varchar(20),
+	@StatusInActive varchar(2),
+	@Status varchar(2),
+    @CreatedBy varchar(100)
+as
+begin
+	declare @Id varchar(50)
+	select @id=Id from ExchangeRate where InsuranceId=@InsuranceId and CurrencyCode=@CurrencyCode and OppositeCurrencyCode=@OppositeCurrencyCode and Status=@Status
+		
+	declare 
+		@BrokerId varchar(5) 
+		
+	select @BrokerId=BrokerId from CustomerUser where UserId=@CreatedBy
+
+	if @id is not null
+	begin
+		update ExchangeRate set Status=@StatusInActive,ModifiedAt=GETDATE(),ModifiedBy=@CreatedBy where Id=@id 
+	end
+	insert into ExchangeRate 
+	select NEWID(),@InsuranceId,@CurrencyCode,@OppositeCurrencyCode,@BuyValue,@SellValue,@MiddleValue,convert(date, @EffectiveAt, 103),@Status,GETDATE(),@CreatedBy,GETDATE(),@CreatedBy,@BrokerId
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_ListApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_ExchangeRate_ListApproval]
+as
+begin
+	select
+		a.InsuranceId,
+		b.Name,
+		case 
+			when a.Status = 'DR' Then 'Draft'  
+			when a.Status = 'NA' Then 'Waiting Approval'
+	end Status
+	into #Data from ExchangeRateTemp a 
+	left join Insurance b on a.InsuranceId=b.Id
+	group by Name,a.Status,InsuranceId
+
+	select Id,Name, case when Status='1' Then 'Approve' end Status from Insurance where Id not in (select InsuranceId from #Data) union
+	select * from #Data
+
+	drop table #Data
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangeRate_Template]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE PROC [dbo].[SP_ExchangeRate_Template]
+	@BrokerId varchar(3)=null
+as
+begin
+	select  
+		'Insurance ABC' [Insurance Name],
+		'IDR' [Source Currency],
+		'CNY' [Opposite Currency],
+		cast(1000 as float)  [Value Buy],
+		cast(1000 as float)  [Value Sell],
+		cast(1000 as float) [Value Middle],
+		convert(varchar(10),GETDATE(),103) [Effective Date]
+
+	select Name from Insurance where Status= 'A' and BrokerId=@BrokerId
+	select Code [Currency Code],Name [Currency Name] from Currency where Status= '1'
+end
+-- END CODE HERE --
+-- VERSION [V20190515.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_ExchangRate_Export]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE Proc [dbo].[SP_ExchangRate_Export]
+	@InsuranceID varchar(50),
+	@Start varchar(10),
+	@End varchar(10)
+as
+select 
+	 b.Name InsuranceName
+	,c.Code+' - '+c.Name SourceCurrency
+	,d.Code+' - '+d.Name OppositeCurrency
+	,a.BuyValue
+	,a.SellValue
+	,a.MiddleValue
+	,CONVERT(varchar(10),EffectiveAt,105)EffectiveAt
+	,case when a.Status='A' then 'Active' else 'Expired' end Status 
+	,e.UserName CreatedBy
+	,a.CreatedAt
+	,f.UserName ModifiedBy
+	,a.ModifiedAt
+from ExchangeRate a 
+left join Insurance b on a.InsuranceId=b.Id
+left Join Currency c  on a.CurrencyCode=c.Code
+left Join Currency d  on a.OppositeCurrencyCode=d.Code
+left join AspNetUsers e on a.CreatedBy=e.Id
+left join AspNetUsers f on a.ModifiedBy=f.Id
+
+where CONVERT(date,EffectiveAt) between @Start and @End and InsuranceId=@InsuranceID
+order by EffectiveAt asc
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Generate_Virtual_Number]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Generate_Virtual_Number]
+	@Bin varchar(4)='',
+	@VADummy varchar(12)=''
+as
+begin
+	declare
+		@VANumber varchar(12)='000000000000',
+		@Seq int,
+		@Lenght int,
+		@VA varchar(12),
+		@Code varchar(12)
+
+		
+	DECLARE @VANumberCursor as CURSOR
+	SET @VANumberCursor = CURSOR FAST_FORWARD FOR 
+		select @VADummy
+	OPEN @VANumberCursor;
+		FETCH NEXT FROM @VANumberCursor INTO @Code
+	WHILE @@FETCH_STATUS = 0
+	BEGIN
+		if @Code=''
+		begin
+			set @Lenght = 0
+		end
+		else
+		begin
+			set @Lenght = len(@Code)
+		end
+
+		Select @Code=cast(@VADummy+LEFT(SUBSTRING (RTRIM(RAND()) + SUBSTRING(RTRIM(RAND()),3,12), 3,12),25-@Lenght) as varchar(12))
+
+		print(@Code+ ' -> ' + cast(len(@Code) as varchar))
+		if(len(@Code)>=12)
+		begin
+			
+			if not exists (select 1 from (select Code from VirtualAccount union select Code from VirtualAccountTemp)a where a.Code = @Code)
+			begin
+				FETCH NEXT FROM @VANumberCursor INTO @Code
+				select @Code VANumber, cast(1 as bit) Sts
+			end
+			else
+			begin
+				FETCH NEXT FROM @VANumberCursor INTO @Code
+				select @Code VANumber, cast(0 as bit) Sts
+			end
+		end
+	END
+	CLOSE @VANumberCursor;
+	DEALLOCATE @VANumberCursor;
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetAPCounterpart]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya WB
+-- Create date: 2021-02-03
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetAPCounterpart] 
+	-- Add the parameters for the stored procedure here
+	@CustID nvarchar(MAX)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	if(@CustID='all' OR @CustID='0')
+	BEGIN
+	SELECT 
+	apc.Id as Id,
+	apc.CustomerID as CustomerID,
+	apc.Entity as Entity ,
+	apc.CounterpartCode as CounterpartCode ,
+	apc.CounterpartName as CounterpartName,
+	apc.Branch as Branch,
+	apc.Country as Country,
+	cn.Name as CountryName ,
+	apc.Email as Email,
+	apc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	apc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	apc.ModifiedAt as ModifiedAt,
+	'1' as status,
+	apc.City as City,
+	apc.Address as Address,
+	apc.PostalCode,
+	apc.IsEnableCrossSett as IsEnableCrossSet,
+	apc.IsEnableAccessMore as IsEnableAccessMore,
+	apc.IsRegisterAsAR as IsRegisterAsAR,
+	apc.Status as docstatus,
+	ISNULL(apc.VerifStatEmail1,'Not Verified') as VerifStatEmail1,
+	ISNULL(apc.VerifStatEmail2,'Not Verified') as VerifStatEmail2,
+	apc.PasswordAtt as PasswordAtt,
+	ISNULL(apc.VeriPasswordAtt,'Not Created Yet') as VeriPasswordAtt 
+	from APCounterpart apc
+	left outer join Country cn on apc.Country=cn.Id
+	inner join AspNetUsers u on apc.CreatedBy=u.Id
+	where apc.Status<>'NA'
+	order by apc.ModifiedAt desc
+	
+	
+	END
+
+	else
+	begin
+	SELECT 
+	apc.Id as Id,
+	apc.CustomerID as CustomerID,
+	apc.Entity as Entity ,
+	apc.CounterpartCode as CounterpartCode ,
+	apc.CounterpartName as CounterpartName,
+	apc.Branch as Branch,
+	apc.Country as Country,
+	cn.Name as CountryName ,
+	apc.Email as Email,
+	apc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	apc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	apc.ModifiedAt as ModifiedAt,
+	'1' as status,
+	apc.City as City,
+	apc.Address as Address,
+	apc.PostalCode,
+	apc.IsEnableCrossSett as IsEnableCrossSet,
+	apc.IsEnableAccessMore as IsEnableAccessMore,
+	apc.IsRegisterAsAR as IsRegisterAsAR,
+	apc.Status as docstatus,
+	ISNULL(apc.VerifStatEmail1,'Not Verified') as VerifStatEmail1,
+	ISNULL(apc.VerifStatEmail2,'Not Verified') as VerifStatEmail2,
+	apc.PasswordAtt as PasswordAtt,
+	ISNULL(apc.VeriPasswordAtt,'Not Created Yet') as VeriPasswordAtt 
+	from APCounterpart apc
+	inner join Country cn on apc.Country=cn.Id
+	inner join AspNetUsers u on apc.CreatedBy=u.Id
+	where apc.CustomerID=@CustID 
+	AND apc.Status<>'NA'
+	order by apc.ModifiedAt desc
+	end
+END
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetARCounterpart]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya
+-- Create date: 2021-01-25
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetARCounterpart] 
+	-- Add the parameters for the stored procedure here
+	@CustID nvarchar(MAX)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	if(@CustID='all' OR @CustID='0')
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u1.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	'1' as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	ISNULL(arc.VerifStatEmail1,'Not Verified') as VerifStatEmail1,
+	ISNULL(arc.VerifStatEmail2,'Not Verified') as VerifStatEmail2,
+	arc.PasswordAtt as PasswordAtt,
+	ISNULL(arc.VeriPasswordAtt,'Not Created Yet') as VeriPasswordAtt 
+	from ARCounterpart arc
+	LEFT OUTER JOIN Country cn on arc.Country=cn.Id
+	INNER JOIN AspNetUsers u on arc.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on arc.ModifiedBy = u1.Id
+	where arc.Status<>'NA'
+	order by arc.ModifiedAt desc
+	
+	
+	END
+
+	else
+	begin
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	'1' as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	ISNULL(arc.VerifStatEmail1,'Not Verified') as VerifStatEmail1,
+	ISNULL(arc.VerifStatEmail2,'Not Verified') as VerifStatEmail2,
+	arc.PasswordAtt as PasswordAtt,
+	ISNULL(arc.VeriPasswordAtt,'Not Created Yet') as VeriPasswordAtt 
+	from ARCounterpart arc
+	LEFT OUTER JOIN Country cn on arc.Country=cn.Id
+	INNER JOIN AspNetUsers u on arc.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on arc.ModifiedBy=u1.Id
+	where arc.CustomerID=@CustID 
+	AND arc.Status<>'NA'
+	order by arc.ModifiedAt desc
+	end
+	
+END
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetBulkUploadMonitoring]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu Baskoro
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetBulkUploadMonitoring] 
+	-- Add the parameters for the stored procedure here
+	@creator nvarchar(max)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT
+	Id,
+	FileName,
+	Module,
+	UploadDate,
+	LastStatus,
+	StatusDate,
+	Controller,
+	Action,
+	Id,
+	CreatedBy,
+	CreatedDate,
+	ModifiedBy,
+	ModifiedDate
+	from BulkUploadMonitoring
+	where CreatedBy=@creator
+	AND LastStatus <>'Submitted' AND LastStatus <> 'Submitted Error'
+	END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetClientSpecificConversionRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-02-10
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetClientSpecificConversionRate]
+	-- Add the parameters for the stored procedure here
+	@customerId int
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @customerId=0
+	BEGIN
+    -- Insert statements for procedure here
+	SELECT 
+	e.Id,
+	e.ClientCd as ClientId,
+	a.ClientCd as clientCode,
+	a.ClientName as ClientName,
+	CurrencyCode,
+	OppositeCurrencyCode,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	e.CreatedAt,
+	u.UserName as CreatedBy,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.Status,
+	c.Name as CustomerName
+	from SpecificConversionRate e
+	INNER JOIN AspNetUsers u on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on e.ModifiedBy =u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	LEFT OUTER JOIN Customer c on e.CustomerId=c.Id
+	where e.Status<>'D'
+	END
+
+	ELSE
+	BEGIN
+	SELECT 
+	e.Id,
+	e.ClientCd as ClientId,
+	a.ClientCd as clientCode,
+	a.ClientName as ClientName,
+	CurrencyCode,
+	OppositeCurrencyCode,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	e.CreatedAt,
+	u.UserName as CreatedBy,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.Status,
+	c.Name as CustomerName
+	from SpecificConversionRate e
+	INNER JOIN AspNetUsers u on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on e.ModifiedBy =u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	LEFT OUTER JOIN Customer c on e.CustomerId=c.Id
+	where e.Status<>'D' and e.CustomerId=@customerId
+	END
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetConfigListApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_GetConfigListApproval]
+	@BrokerID nvarchar(50),
+	@User nvarchar(50),
+	@DataType nvarchar(50)
+AS
+
+BEGIN
+	BEGIN
+		SELECT distinct
+			t.BrokerID,
+			CASE
+				WHEN (SELECT t1.DefaultBank FROM OutUploadFileConfigTemp t1 
+					WHERE 
+					t1.[Status] = 'WA' AND 
+					t1.BrokerID = t.BrokerID AND t1.[Name] = 'AP') = 'Yes' THEN 'Default'
+				ELSE 'Custom'
+			END DefaultTemplateAP,
+			CASE
+				WHEN (SELECT t1.DefaultBank FROM OutUploadFileConfigTemp t1 
+				WHERE 
+				t1.[Status] = 'WA' AND 
+				t1.BrokerID = t.BrokerID AND t1.[Name] = 'AR') = 'Yes' THEN 'Default'
+				ELSE 'Custom'
+			END DefaultTemplateAR,
+			(SELECT t1.UploadSuccessType FROM OutUploadFileConfigTemp t1 
+				WHERE 
+				t1.[Status] = 'WA' AND 
+				t1.BrokerID = t.BrokerID AND t1.[Name] = 'AP') UploadSuccessTypeAP,
+			(SELECT t1.UploadSuccessType FROM OutUploadFileConfigTemp t1 
+				WHERE 
+				t1.[Status] = 'WA' AND 
+				t1.BrokerID = t.BrokerID AND t1.[Name] = 'AR') UploadSuccessTypeAR,
+			c.TransactionType,
+			c.SettlementType,
+			Case when t.MainID is null and t.Status = 'WA'
+				then 'New'
+				when t.MainID is not null and t.Status = 'WA'
+				then 'Update'
+				when t.MainID is not null and t.Status = 'WD'
+				then 'Delete'
+			end as RequestType,
+			U1.UserName CreatedBy,
+			t.CreatedAt,
+			U2.UserName ModifiedBy,
+			t.ModifiedAt,
+			t.Status,
+			2 as [Type],
+			(SELECT t1.ApprovalComment FROM OutUploadFileConfigTemp t1 
+				WHERE 
+				t1.[Status] = 'WA' AND 
+				t1.BrokerID = t.BrokerID AND t1.[Name] = 'AP') ApprovalComment
+		into #ConfigList
+		from Customer c
+		left join OutUploadFileConfigTemp t on c.Id = t.BrokerID AND t.ID = (SELECT TOP(1)t1.ID FROM OutUploadFileConfigTemp t1 
+			WHERE 
+			t1.[Status] = 'WA' AND 
+			t1.BrokerID = t.BrokerID)
+		left join AspNetUsers U1 on t.CreatedBy = U1.Id
+		left join AspNetUsers U2 on t.CreatedBy = U2.Id
+		where t.BrokerID > 0
+	END
+
+	IF @DataType = 'My Draft' or @DataType = '3'
+		BEGIN
+		SELECT * FROM #ConfigList
+			where CreatedBy = @User and Status = 'DR' and BrokerID = @BrokerID
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'My Revision' or @DataType = '4'
+		BEGIN
+		SELECT * FROM #ConfigList
+			where CreatedBy = @User and Status = 'RV' and BrokerID = @BrokerID
+			order by ModifiedAt desc
+		END
+	ELSE IF (@DataType = 'My Request' or @DataType = '5')
+		BEGIN
+		SELECT * FROM #ConfigList
+			where CreatedBy = @User and (Status in ('WA', 'A', 'R', 'WD', 'D')) and BrokerID = @BrokerID
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'To Be Approved' or @DataType = '6'
+		BEGIN
+		SELECT * FROM #ConfigList
+			where CreatedBy != @User and Status in ('WA', 'WD') and BrokerID = @BrokerID
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'All' or @DataType = '2'
+		BEGIN
+		SELECT * FROM #ConfigList
+			where Status not in ('R', 'D', 'DR')  and BrokerID = @BrokerID
+			order by ModifiedAt desc
+		END
+	
+	DROP TABLE #ConfigList
+END
+
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetEmailTemplateList]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_GetEmailTemplateList]
+	--@BrokerId int
+AS
+
+BEGIN
+
+	declare @EmailTemplateList table (
+		ID uniqueidentifier,
+		[Event] nvarchar(200),
+		[Name] varchar(100),
+		[Description] nvarchar(255),
+		[Subject] nvarchar(100),
+		BodyEmail nvarchar(max),
+		BodyExport nvarchar(max),
+		isEdit bit,
+		Editable nvarchar(3),
+		[Status] varchar(100),
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		[Type] int,
+		OnQueue bit
+)
+
+	BEGIN
+
+		insert into @EmailTemplateList
+		SELECT
+			et.Id ID,
+			et.Event [Event],
+			et.Name [Name], 
+			et.Description [Description],
+			et.Subject [Subject],
+			--case 
+			--	when len(et.Content) >30 then LEFT(CAST(REPLACE(REPLACE(et.Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)'),30)+' ... More'
+			--	else CAST(REPLACE(REPLACE(et.Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') 
+			--end BodyEmail,
+			et.Content BodyEmail,
+			CAST(REPLACE(REPLACE(et.Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') BodyExport,
+			et.isEdit ,
+			case
+				when et.isEdit = 0 then 'No'
+				else 'Yes'
+			end Editable,
+			et.Status [Status],
+			U1.UserName CreatedBy,
+			et.CreatedAt,
+			U2.UserName ModifiedBy,
+			et.ModifiedAt,
+			1 as [Type],
+			CASE WHEN ett.EmailTemplateId IS NOT NULL
+			   THEN 1
+			   ELSE 0
+			END as OnQueue
+		FROM EmailTemplate et
+			left join EmailTemplateTemp ett on et.Id = ett.EmailTemplateId
+			left join AspNetUsers U1 on et.CreatedBy = U1.Id
+			left join AspNetUsers U2 on et.ModifiedBy = U2.Id
+	END
+
+	BEGIN 
+
+	SELECT * FROM @EmailTemplateList
+
+	END
+END
+
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetEmailTemplateListApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetEmailTemplateListApproval]
+	@User nvarchar(50),
+	@DataType nvarchar(50)
+AS
+
+BEGIN
+
+	declare @EmailTemplateList table (
+		ID uniqueidentifier,
+		[Event] nvarchar(200),
+		[Name] varchar(100),
+		[Description] nvarchar(255),
+		[Subject] nvarchar(100),
+		BodyEmail nvarchar(max),
+		BodyExport nvarchar(max),
+		isEdit bit,
+		Editable nvarchar(3),
+		RequestType varchar(100) null,
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		Status varchar(100),
+		[Type] int
+)
+
+	BEGIN
+
+		insert into @EmailTemplateList
+		SELECT
+			et.Id ID,
+			et.Event [Event],
+			et.Name [Name], 
+			et.Description [Description],
+			et.Subject [Subject],
+			et.Content BodyEmail,
+			CAST(REPLACE(REPLACE(et.Content, '>', '/>'), '</', '<') AS XML).value('.', 'varchar(max)') BodyExport,
+			et.isEdit ,
+			case
+				when et.isEdit = 0 then 'No'
+				else 'Yes'
+			end Editable,
+			Case when et.EmailTemplateId is null and et.Status = 'WA'
+				then 'New'
+				when et.EmailTemplateId is not null and et.Status = 'WA'
+				then 'Update'
+				when et.EmailTemplateId is not null and et.Status = 'WD'
+				then 'Delete'
+			end as RequestType,
+			U1.UserName CreatedBy,
+			et.CreatedAt,
+			U2.UserName ModifiedBy,
+			et.ModifiedAt,
+			et.Status ,
+			2 as [Type]
+		FROM EmailTemplateTemp et
+			left join AspNetUsers U1 on et.CreatedBy = U1.Id
+			left join AspNetUsers U2 on et.ModifiedBy = U2.Id
+	END
+
+	IF @DataType = 'My Draft' or @DataType = '3'
+				BEGIN
+				SELECT * FROM @EmailTemplateList
+					where CreatedBy = @User and Status = 'DR'
+					order by ModifiedAt desc
+				END
+	ELSE IF @DataType = 'My Revision' or @DataType = '4'
+			BEGIN
+			SELECT * FROM @EmailTemplateList
+				where CreatedBy = @User and Status = 'RV'
+				order by ModifiedAt desc
+			END
+	ELSE IF (@DataType = 'My Request' or @DataType = '5')
+		BEGIN
+		SELECT * FROM @EmailTemplateList
+			where CreatedBy = @User and (Status in ('WA', 'WD'))
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'To Be Approved' or @DataType = '6'
+		BEGIN
+		SELECT * FROM @EmailTemplateList
+			where CreatedBy != @User and Status in ('WA', 'WD') 
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'All' or @DataType = '2'
+		BEGIN
+		SELECT * FROM @EmailTemplateList
+			where Status not in ('R', 'D', 'DR') 
+			order by ModifiedAt desc
+		END
+END
+
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetExchangeRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-02-10
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetExchangeRate]
+	-- Add the parameters for the stored procedure here
+	@customerId int
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @customerId=0
+	BEGIN
+    -- Insert statements for procedure here
+	SELECT 
+	e.Id,
+	CurrencyCode,
+	OppositeCurrencyCode,
+	--CONVERT(NVARCHAR(18), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	e.CreatedAt,
+	u.UserName as CreatedBy,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.Status,
+	--CONVERT(INT,e.CustomerId) as CustomerId,
+	ISNULL(c.Name,'') as CustomerName
+	from ExchangeRate e
+	INNER JOIN AspNetUsers u on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on e.ModifiedBy =u1.Id
+	LEFT OUTER JOIN Customer c on e.CustomerId=c.Id
+	where e.Status<>'D'
+	END
+
+	ELSE
+	BEGIN
+	SELECT 
+	e.Id,
+	CurrencyCode,
+	OppositeCurrencyCode,
+	--CONVERT(NVARCHAR(18), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	e.CreatedAt,
+	u.UserName as CreatedBy,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.Status,
+	--CONVERT(INT,e.CustomerId) as CustomerId,
+	ISNULL(c.Name,'') as CustomerName
+	from ExchangeRate e
+	INNER JOIN AspNetUsers u on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers u1 on e.ModifiedBy =u1.Id
+	LEFT OUTER JOIN Customer c on e.CustomerId=c.Id
+	where e.Status<>'D' AND e.CustomerId=@customerId
+	END
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetExchangeRate_FromUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetExchangeRate_FromUpload]
+	-- Add the parameters for the stored procedure here
+	@procId UNIQUEIDENTIFIER
+	,@isExisting bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	CurrencyCode,
+	OppositeCurrencyCode,
+	Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	CreatedAt,
+	CreatedBy
+	from ExchangeRateUpload
+	where IsExisting=@isExisting AND PBulkId=@procId
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetExchangeRateUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetExchangeRateUpload]
+	-- Add the parameters for the stored procedure here
+	@BulkId as UNIQUEIDENTIFIER
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	Id,
+	PBulkId,
+	CurrencyCode,
+	OppositeCurrencyCode,
+	Rate,
+	EffectiveFrom,
+	EffectiveTo,
+	CustomerId,
+	CreatedAt,
+	CreatedBy,
+    CONVERT(bit,IsExisting) as IsExisting,
+	ErrorMessage
+	from ExchangeRateUpload where PBulkId=@BulkId
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetGroupProfile]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetGroupProfile]
+	@ProfileId int,
+	@type int
+AS
+
+--type 2 : Temp
+--type 1 : Main
+
+	declare @gp table (
+		MenuId int,
+		MenuName varchar(100),
+		GID uniqueidentifier,
+		Parent int,
+		[Read] bit, 
+		[Create] bit, 
+		[Update] bit, 
+		[Delete] bit, 
+		[Approve] bit,
+		[Upload] bit,
+		[Export] bit,
+		[RemoveRequest] bit,
+		isParent bit,
+		isSubParent bit,
+		Seq int
+	)
+	
+	insert into @gp (MenuId, MenuName, Parent, isParent, isSubParent, Seq)
+	select 
+		Id, 
+		Name, 
+		Parent, 
+		CASE  
+			WHEN Parent = 0 THEN CONVERT(bit,1) 
+			ELSE CONVERT(bit,0) 
+		END AS isParent,
+		SubParent,
+		Seq  
+	from Menu
+
+if (@type = 1)
+
+begin
+	update b 
+	set
+		b.GID = s.Id,
+		b.[Read] = s.[Read], 
+		b.[Create] = s.[Create], 
+		b.[Update] = s.[Update], 
+		b.[Delete] = s.[Delete], 
+		b.[Approve] = s.[Approve],
+		b.[Upload] = s.[Upload],
+		b.[Export] = s.[Export],
+		b.[RemoveRequest] = s.[RemoveRequest]
+	FROM GroupProfile s
+	LEFT JOIN @gp b ON s.MenuId = b.MenuId
+	WHERE ProfileId = @ProfileId
+end
+
+else
+
+begin
+	update b 
+	set
+		b.GID = s.Id,
+		b.[Read] = s.[Read], 
+		b.[Create] = s.[Create], 
+		b.[Update] = s.[Update], 
+		b.[Delete] = s.[Delete], 
+		b.[Approve] = s.[Approve],
+		b.[Upload] = s.[Upload],
+		b.[Export] = s.[Export],
+		b.[RemoveRequest] = s.[RemoveRequest]
+	FROM GroupProfileTemp s
+	LEFT JOIN @gp b ON s.MenuId = b.MenuId
+	WHERE ProfileId = @ProfileId
+end
+
+	update c
+	set
+		GID = isnull(GID, (SELECT CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER))),
+		[Read] = isnull([Read],0), 
+		[Create] = isnull([Create],0), 
+		[Update] = isnull([Update],0), 
+		[Delete] = isnull([Delete],0), 
+		[Approve] = isnull([Approve],0),
+		[Upload] = isnull([Upload],0),
+		[Export] = isnull([Export],0),
+		[RemoveRequest] = isnull([RemoveRequest],0)
+	FROM @gp c
+	 
+	SELECT x.*
+
+	--new query deni start 1
+	,case when x.[Read] = isnull(b.[Read],0) then Cast(1 as bit) else Cast(0 as bit) end ReadC
+	,case when x.[Create] = isnull(b.[Create],0) then Cast(1 as bit) else Cast(0 as bit) end CreateC
+	,case when x.[Update] = isnull(b.[Update],0) then Cast(1 as bit) else Cast(0 as bit) end UpdateC
+	,case when x.[Delete] = isnull(b.[Delete],0) then Cast(1 as bit) else Cast(0 as bit) end DeleteC
+	,case when x.[Approve] = isnull(b.[Approve],0) then Cast(1 as bit) else Cast(0 as bit) end ApproveC
+	,case when x.[Upload] = isnull(b.[Upload],0) then Cast(1 as bit) else Cast(0 as bit) end UploadC
+	,case when x.[Export] = isnull(b.[Export],0) then Cast(1 as bit) else Cast(0 as bit) end ExportC
+	,case when x.[RemoveRequest] = isnull(b.[RemoveRequest],0) then Cast(1 as bit) else Cast(0 as bit) end RemoveRequestC
+	FROM @gp x
+	LEFT JOIN GroupProfileTemp y on x.MenuID = y.MenuId and @ProfileId = y.ProfileId
+	LEFT JOIN ProfileTemp z on y.ProfileId = z.Id
+	LEFT JOIN Profile a on z.ProfileId = a.Id
+	LEFT JOIN GroupProfile b on x.MenuID = b.MenuId and a.Id = b.ProfileId
+	--new query deni end 1
+	 
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetGroupProfile_BU]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetGroupProfile_BU]
+	@ProfileId int,
+	@type int
+AS
+
+--type 2 : Temp
+--type 1 : Main
+
+	declare @gp table (
+		MenuId int,
+		MenuName varchar(100),
+		GID uniqueidentifier,
+		Parent int,
+		[Read] bit, 
+		[Create] bit, 
+		[Update] bit, 
+		[Delete] bit, 
+		[Approve] bit,
+		[Upload] bit,
+		[Export] bit,
+		[RemoveRequest] bit,
+		isParent bit,
+		isSubParent bit,
+		Seq int
+	)
+	
+	insert into @gp (MenuId, MenuName, Parent, isParent, isSubParent, Seq)
+	select 
+		Id, 
+		Name, 
+		Parent, 
+		CASE  
+			WHEN Parent = 0 THEN CONVERT(bit,1) 
+			ELSE CONVERT(bit,0) 
+		END AS isParent,
+		SubParent,
+		Seq  
+	from Menu
+
+if (@type = 1)
+
+begin
+	update b 
+	set
+		b.GID = s.Id,
+		b.[Read] = s.[Read], 
+		b.[Create] = s.[Create], 
+		b.[Update] = s.[Update], 
+		b.[Delete] = s.[Delete], 
+		b.[Approve] = s.[Approve],
+		b.[Upload] = s.[Upload],
+		b.[Export] = s.[Export],
+		b.[RemoveRequest] = s.[RemoveRequest]
+	FROM GroupProfile s
+	LEFT JOIN @gp b ON s.MenuId = b.MenuId
+	WHERE ProfileId = @ProfileId
+end
+
+else
+
+begin
+	update b 
+	set
+		b.GID = s.Id,
+		b.[Read] = s.[Read], 
+		b.[Create] = s.[Create], 
+		b.[Update] = s.[Update], 
+		b.[Delete] = s.[Delete], 
+		b.[Approve] = s.[Approve],
+		b.[Upload] = s.[Upload],
+		b.[Export] = s.[Export],
+		b.[RemoveRequest] = s.[RemoveRequest]
+	FROM GroupProfileTemp s
+	LEFT JOIN @gp b ON s.MenuId = b.MenuId
+	WHERE ProfileId = @ProfileId
+end
+
+	update c
+	set
+		GID = isnull(GID, (SELECT CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER))),
+		[Read] = isnull([Read],0), 
+		[Create] = isnull([Create],0), 
+		[Update] = isnull([Update],0), 
+		[Delete] = isnull([Delete],0), 
+		[Approve] = isnull([Approve],0),
+		[Upload] = isnull([Upload],0),
+		[Export] = isnull([Export],0),
+		[RemoveRequest] = isnull([RemoveRequest],0)
+	FROM @gp c
+	 
+	SELECT * FROM @gp
+	 
+RETURN 0
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetIndustryList]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetIndustryList]
+	--@BrokerId int
+AS
+
+BEGIN
+
+	declare @IndustryList table (
+		ID int,
+		IndustryName varchar(100),
+		TotalCompany int null,
+		[Description] nvarchar(1000),
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		Status varchar(100),
+		[Type] int,
+		OnQueue bit
+)
+
+	BEGIN
+
+		insert into @IndustryList
+		SELECT
+			i.ID ID,
+			i.Name IndustryName, 
+			Total.Customers TotalCompany,
+			i.[Description] [Description],
+			U1.UserName CreatedBy,
+			i.CreatedAt,
+			U2.UserName ModifiedBy,
+			i.ModifiedAt,
+			i.Status,
+			1 as [Type],
+			CASE WHEN it.MainID IS NOT NULL
+			   THEN 1
+			   ELSE 0
+			END as OnQueue
+		FROM Industry I
+		left join IndustryTemp it on I.ID = it.MainID
+			left join AspNetUsers U1 on i.CreatedBy = U1.Id
+			left join AspNetUsers U2 on i.ModifiedBy = U2.Id
+			OUTER APPLY (
+				SELECT COUNT(C.Id) as Customers
+				FROM Customer C
+				WHERE C.IndustryID = I.ID and C.Status = 'A') as Total
+		WHERE i.ID > 0 
+	END
+
+	BEGIN 
+
+	SELECT * FROM @IndustryList
+
+	END
+END
+
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetIndustryListApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_GetIndustryListApproval]
+	@User nvarchar(50),
+	@DataType nvarchar(50)
+	--@BrokerId int
+AS
+
+BEGIN
+
+	declare @IndustryList table (
+		ID int,
+		IndustryName varchar(100),
+		TotalCompany int null,
+		[Description] nvarchar(1000),
+		RequestType varchar(100) null,
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		Status varchar(100),
+		[Type] int
+)
+
+	BEGIN
+
+		insert into @IndustryList
+		SELECT
+			i.ID ID,
+			i.Name IndustryName, 
+			Total.Customers TotalCompany,
+			i.[Description] [Description],
+			Case when i.MainID is null and i.Status = 'WA'
+			then 'New'
+			when i.MainID is not null and i.Status = 'WA'
+			then 'Update'
+			when i.MainID is not null and i.Status = 'WD'
+			then 'Delete'
+		end as RequestType,
+			U1.UserName CreatedBy,
+			i.CreatedAt,
+			U2.UserName ModifiedBy,
+			i.ModifiedAt,
+			i.Status,
+			2 as [Type]
+		FROM IndustryTemp I
+			left join AspNetUsers U1 on i.CreatedBy = U1.Id
+			left join AspNetUsers U2 on i.ModifiedBy = U2.Id
+			OUTER APPLY (
+				SELECT COUNT(C.Id) as Customers
+				FROM Customer C
+				WHERE C.IndustryID = I.MainID and C.Status = 'A') as Total
+		WHERE i.Id > 0
+	END
+
+	IF @DataType = 'My Draft' or @DataType = '3'
+				BEGIN
+				SELECT * FROM @IndustryList
+					where CreatedBy = @User and Status = 'DR'
+					order by ModifiedAt desc
+				END
+	ELSE IF @DataType = 'My Revision' or @DataType = '4'
+			BEGIN
+			SELECT * FROM @IndustryList
+				where CreatedBy = @User and Status = 'RV'
+				order by ModifiedAt desc
+			END
+	ELSE IF (@DataType = 'My Request' or @DataType = '5')
+		BEGIN
+		SELECT * FROM @IndustryList
+			where CreatedBy = @User and (Status in ('WA', 'WD'))
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'To Be Approved' or @DataType = '6'
+		BEGIN
+		SELECT * FROM @IndustryList
+			where CreatedBy != @User and Status in ('WA', 'WD') 
+			order by ModifiedAt desc
+		END
+	ELSE IF @DataType = 'All' or @DataType = '2'
+		BEGIN
+		SELECT * FROM @IndustryList
+			where Status not in ('R', 'D', 'DR', 'IP') 
+			order by ModifiedAt desc
+		END
+END
+
+RETURN 0
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMenuByIndustry]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetMenuByIndustry]
+	@IndustryID int,
+	@Type int
+AS
+
+--type 2 : Temp
+--type 1 : Main
+
+	declare @mbi table (
+		ID int,
+		IndustryID int,
+		MenuID int,
+		MenuName varchar(100),
+		IndustryMenuText varchar(100),
+		Parent int,
+		isParent bit,
+		Seq int
+	)
+	
+	insert into @mbi (MenuID, MenuName, Parent, isParent, Seq)
+	select 
+		Id, 
+		Name, 
+		Parent, 
+		CASE  
+			WHEN Parent = 0 THEN CONVERT(bit,1) 
+			ELSE CONVERT(bit,0) 
+		END AS isParent,
+		Seq  
+	from Menu
+	where Id not in (1)
+if (@type = 1)
+
+begin
+	update mbi 
+	set
+		mbi.ID = s.ID,
+		mbi.IndustryID = s.IndustryID,
+		mbi.IndustryMenuText = s.IndustryMenuText
+	FROM MenuByIndustry s
+	LEFT JOIN @mbi mbi ON s.MenuId = mbi.MenuId
+	WHERE s.IndustryID = @IndustryID
+end
+ 
+else
+
+begin
+	update mbi 
+	set
+		mbi.ID = s.ID,
+		mbi.IndustryID = s.IndustryID,
+		mbi.IndustryMenuText = s.IndustryMenuText
+	FROM MenuByIndustryTemp s
+	LEFT JOIN @mbi mbi ON s.MenuId = mbi.MenuId
+	WHERE s.IndustryID = @IndustryID
+end
+
+	update c
+	set
+		ID = isnull(ID, 0),
+		IndustryID = isnull(IndustryID, 0),
+		IndustryMenuText = isnull(IndustryMenuText, '')
+	FROM @mbi c
+	 
+	SELECT * FROM @mbi
+	 
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMyTask_APCounterpartDM]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya WB
+-- Create date: 2021-01-31
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetMyTask_APCounterpartDM] 
+	-- Add the parameters for the stored procedure here
+	@Status nvarchar(10),
+	@UserId nvarchar(max)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @Status='DR'
+	BEGIN
+	SET @Status='SD'
+	END
+    -- Insert statements for procedure here
+
+	if @Status='REQ'
+	BEGIN
+		SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.Entity as Entity ,
+	arc.CounterpartCode as CounterpartCode ,
+	arc.CounterpartName as CounterpartName,
+	arc.Branch as Branch,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.Address as Address,
+	arc.PostalCode as PostalCode,
+	arc.City as City,
+	arc.IsEnableCrossSett as IsEnableCrossSet,
+	arc.IsEnableAccessMore as IsEnableAccessMore,
+	arc.IsRegisterAsAR as IsRegisterAsAR,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Update'
+	when 'D' then 'Delete'
+	END as TypeDesc
+	from APCounterpartTemp arc
+	inner join Country cn on arc.Country=cn.Id
+	inner join AspNetUsers u on arc.CreatedBy=u.Id
+
+	where arc.Status in ('WA','WD') AND arc.CreatedBy<>@UserId
+	END
+
+	ELSE IF @Status='RV'
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.Entity as Entity ,
+	arc.CounterpartCode as CounterpartCode ,
+	arc.CounterpartName as CounterpartName,
+	arc.Branch as Branch,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u1.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.Address as Address,
+	arc.PostalCode as PostalCode,
+	arc.City as City,
+	arc.IsEnableCrossSett as IsEnableCrossSet,
+	arc.IsEnableAccessMore as IsEnableAccessMore,
+	arc.IsRegisterAsAR as IsRegisterAsAR,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	--case arc.TypeTran
+	--when 'I' then 'New'
+	--when 'U' then 'Update'
+	--when 'D' then 'Delete'
+	--END as TypeDesc
+	'Need Revision' as TypeDesc
+	from APCounterpartTemp arc
+	inner join Country cn on arc.Country=cn.Id
+	inner join AspNetUsers u on arc.CreatedBy=u.Id
+	inner join AspNetUsers u1 on arc.ModifiedBy=u1.Id
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	ELSE IF @Status='SD'  OR @Status='DR'
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.Entity as Entity ,
+	arc.CounterpartCode as CounterpartCode ,
+	arc.CounterpartName as CounterpartName,
+	arc.Branch as Branch,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.CreatedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.Address as Address,
+	arc.PostalCode as PostalCode,
+	arc.City as City,
+	arc.IsEnableCrossSett as IsEnableCrossSet,
+	arc.IsEnableAccessMore as IsEnableAccessMore,
+	arc.IsRegisterAsAR as IsRegisterAsAR,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	--case arc.TypeTran
+	--when 'I' then 'New'
+	--when 'U' then 'Update'
+	--when 'D' then 'Delete'
+	--END as TypeDesc
+	'Draft' as TypeDesc
+	from APCounterpartTemp arc
+	inner join Country cn on arc.Country=cn.Id
+	inner join AspNetUsers u on arc.CreatedBy=u.Id
+	inner join AspNetUsers u1 on arc.ModifiedBy=u1.Id
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	ELSE IF @Status='WA' OR @Status='R' OR @Status='A' OR @Status='WD'
+	
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.Entity as Entity ,
+	arc.CounterpartCode as CounterpartCode ,
+	arc.CounterpartName as CounterpartName,
+	arc.Branch as Branch,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.Address as Address,
+	arc.PostalCode as PostalCode,
+	arc.City as City,
+	arc.IsEnableCrossSett as IsEnableCrossSet,
+	arc.IsEnableAccessMore as IsEnableAccessMore,
+	arc.IsRegisterAsAR as IsRegisterAsAR,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Update'
+	when 'D' then 'Delete'
+	END as TypeDesc
+	from APCounterpartTemp arc
+	inner join Country cn on arc.Country=cn.Id
+	inner join AspNetUsers u on arc.CreatedBy=u.Id
+
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	ELSE
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.Entity as Entity ,
+	arc.CounterpartCode as CounterpartCode ,
+	arc.CounterpartName as CounterpartName,
+	arc.Branch as Branch,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.Address as Address,
+	arc.PostalCode as PostalCode,
+	arc.City as City,
+	arc.IsEnableCrossSett as IsEnableCrossSet,
+	arc.IsEnableAccessMore as IsEnableAccessMore,
+	arc.IsRegisterAsAR as IsRegisterAsAR,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Update'
+	when 'D' then 'Delete'
+	END as TypeDesc
+	from APCounterpartTemp arc
+	inner join Country cn on arc.Country=cn.Id
+	inner join AspNetUsers u on arc.CreatedBy=u.Id
+
+	where arc.Status in ('WA', 'WD') AND arc.CreatedBy=@UserId
+	END
+
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMyTask_ARCounterpartDM]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya WB
+-- Create date: 2021-01-31
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetMyTask_ARCounterpartDM] 
+	-- Add the parameters for the stored procedure here
+	@Status nvarchar(10),
+	@UserId nvarchar(max)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @Status='DR'
+	BEGIN
+	SET @Status='SD'
+	END
+    -- Insert statements for procedure here
+	if @Status='REQ'
+	BEGIN
+		SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Update'
+	when 'D' then 'Deleted'
+	END as TypeDesc
+	from ARCounterpartTemp arc
+	LEFT join Country cn on arc.Country=cn.Id
+	LEFT join AspNetUsers u on arc.CreatedBy=u.Id
+
+	where arc.Status in ('WA', 'WD') AND arc.CreatedBy != @UserId
+	END
+
+	ELSE IF  @Status='SD' OR @Status='DR'
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.CreatedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	--case arc.TypeTran
+	--when 'I' then 'New'
+	--when 'U' then 'Updated'
+	--when 'D' then 'Deleted'
+	--END as TypeDesc
+	'Draft' as TypeDesc
+	from ARCounterpartTemp arc
+	LEFT join Country cn on arc.Country=cn.Id
+	INNER join AspNetUsers u on arc.CreatedBy=u.Id
+	INNER join AspNetUsers u1 on arc.ModifiedBy=u1.Id
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	ELSE IF  @Status='RV' 
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u1.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	--case arc.TypeTran
+	--when 'I' then 'New'
+	--when 'U' then 'Updated'
+	--when 'D' then 'Deleted'
+	--END as TypeDesc
+	'Need To Revise' as TypeDesc
+	from ARCounterpartTemp arc
+	LEFT join Country cn on arc.Country=cn.Id
+	INNER join AspNetUsers u on arc.CreatedBy=u.Id
+	INNER join AspNetUsers u1 on arc.ModifiedBy=u1.Id
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	ELSE IF @Status='WA' OR @Status='R' OR @Status='A'
+	BEGIN
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Updated'
+	when 'D' then 'Deleted'
+	END as TypeDesc
+	from ARCounterpartTemp arc
+	LEFT join Country cn on arc.Country=cn.Id
+	LEFT join AspNetUsers u on arc.CreatedBy=u.Id
+	where arc.Status=@Status AND arc.CreatedBy=@UserId
+	END
+
+	else 
+	begin
+	SELECT 
+	arc.Id as Id,
+	arc.CustomerID as CustomerID,
+	arc.EntityName as EntityName ,
+	arc.ClientCd as ClientCd ,
+	arc.ClientName as ClientName,
+	arc.BranchName as BranchName,
+	arc.Country as Country,
+	cn.Name as CountryName ,
+	arc.Email as Email,
+	arc.Email2 as Email2,
+	u.UserName as CreatedBy,
+	arc.CreatedAt as CreatedAt,
+	u.UserName as ModifiedBy,
+	arc.ModifiedAt as ModifiedAt,
+	case arc.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'A' then 'Approved'
+	when 'R' then 'Rejected'
+	when 'D' then 'Deleted'
+	when 'DR' then 'Draft'
+	when 'SD' then 'Draft'
+	when 'RV' then 'Revised'
+	END as status,
+	arc.GroupCode as GroupCode,
+	arc.City as City,
+	arc.IsEnableCrossSet as IsEnableCrossSet,
+	arc.Status as docstatus,
+	arc.TypeTran as TypeTran,
+	case arc.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Updated'
+	when 'D' then 'Deleted'
+	END as TypeDesc
+	from ARCounterpartTemp arc
+	LEFT join Country cn on arc.Country=cn.Id
+	LEFT join AspNetUsers u on arc.CreatedBy=u.Id
+	--where arc.Status=@Status AND arc.CreatedBy=@UserId
+	where arc.Status in ('WA','WD') AND arc.CreatedBy=@UserId
+	end
+END
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMyTask_ClientConversionRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya WB
+-- Create date: 2021-02-09
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetMyTask_ClientConversionRate]
+	-- Add the parameters for the stored procedure here
+	@userId as nvarchar(max),
+	@status as nvarchar(50)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @Status='DR'
+	BEGIN
+	SET @Status='SD'
+	END
+    -- Insert statements for procedure here
+	IF @status='REQ'
+	BEGIN
+	SELECT 
+	e.Id,
+	e.ClientCd as clientCode,
+	a.ClientName,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM SpecificConversionRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	where e.Status IN ('WD','WA') AND e.CreatedBy<>@UserId
+	END
+
+	 ELSE IF  @Status='SD' OR @Status='DR' 
+	 BEGIN 
+	SELECT 
+	e.Id,
+	e.ClientCd as clientCode,
+	a.ClientName,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.CreatedAt as ModifiedAt,
+	u.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM SpecificConversionRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	where e.Status=@status AND e.CreatedBy=@UserId
+	 END
+
+	 ELSE IF  @Status='RV' OR @Status='R' OR @Status='A'
+	 BEGIN 
+	SELECT 
+	e.Id,
+	e.ClientCd as clientCode,
+	a.ClientName,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM SpecificConversionRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	where e.Status=@status AND e.CreatedBy=@UserId
+	 END
+
+	 ELSE
+	 BEGIN
+	  SELECT 
+	e.Id,
+	e.ClientCd as clientCode,
+	a.ClientName,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.CreatedAt as ModifiedAt,
+	u.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need to Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM SpecificConversionRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	INNER JOIN ARCounterpart a on e.ClientCd=a.ClientCd
+	where e.Status in ('WA','WD') AND e.CreatedBy=@UserId
+	 END
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMyTask_CustomerUserAccess]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetMyTask_CustomerUserAccess]
+
+	-- Add the parameters for the stored procedure here
+
+	@Status nvarchar(10)
+	,@UserId nvarchar(max)
+AS
+
+BEGIN
+
+	SET NOCOUNT ON;
+
+	IF @Status='REQ'
+BEGIN
+SELECT
+	 CONVERT(NVARCHAR(max),cut.Id) as ID
+
+	,CONVERT (NVARCHAR(MAX),cut.UserId) as IdUser
+
+	,cut.Status as curr_status
+
+	,cut.TempType as tipe
+
+	,cut.BrokerId as BrokerId
+
+	,cre.UserID as RequestBy
+
+	,cut.CreatedAt as RequestDate
+
+	,u.Email as email
+
+	,CONVERT (NVARCHAR(MAX),u.PhoneNumber) as Phone
+
+	,u.UserID as userid
+
+	,u.UserName as usernm
+
+	--,pm.ProfileId as profID
+
+	,(select UserCategory from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id )) as userCategory  --p.UserCategory as userCategory
+
+	,(select Name from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id )) as GroupAccess  --p.Name as GroupAccess
+	, case cut.TempType
+	when 'I' then 'New'
+	WHEN 'U' then 'Edit'
+	WHEN 'D' then 'Deleted'
+	END AS TypeTempDesc
+
+	,case cut.Status
+	WHEN 'WA' then 'Waiting For Approval'
+	WHEN 'WD' then 'Waiting For Delete'
+	WHEN 'A' then 'Approved'
+	WHEN 'R' then 'Rejected'
+	WHEN 'RV' then 'Revision'
+	WHEN 'DR' then 'Draft'
+	WHEN 'SD' then 'Draft'
+	WHEN 'D' then 'Deleted'
+	END AS StatusDesc
+	from CustomerUserTemp cut
+
+	left join AspNetUsers cre on cut.CreatedBy=cre.Id
+
+	left join AspNetUsers u on CONVERT(NVARCHAR(MAX),cut.UserId)=u.Id
+
+	--left join ProfileMemberTemp pm on CONVERT(NVARCHAR(MAX),pm.UserId)=cut.UserId
+
+	--left join Profile p on p.Id=pm.ProfileId
+	--left join Customer C on cut.BrokerId=C.Id 
+
+	where cut.Status IN ('WA','WD') AND cut.CreatedBy <> @UserId 
+	--AND pm.TempType<>'D'
+    AND cut.BrokerId <> 0
+END
+
+ELSE IF @Status='WA' OR @Status='DR' OR @Status='RV' OR @Status='R' OR @Status='A'
+BEGIN
+SELECT
+	 CONVERT(NVARCHAR(max),cut.Id) as ID
+
+	,CONVERT (NVARCHAR(MAX),cut.UserId) as IdUser
+
+	,cut.Status as curr_status
+
+	,cut.TempType as tipe
+
+	,cut.BrokerId as BrokerId
+
+	,cre.UserID as RequestBy
+
+	,cut.CreatedAt as RequestDate
+
+	,u.Email as email
+
+	,CONVERT (NVARCHAR(MAX),u.PhoneNumber) as Phone
+
+	,u.UserID as userid
+
+	,u.UserName as usernm
+
+	--,pm.ProfileId as profID
+
+	,(select UserCategory from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id)) as userCategory  --p.UserCategory as userCategory
+
+	,(select Name from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id)) as GroupAccess  --p.Name as GroupAccess
+
+	, case cut.TempType
+	when 'I' then 'New'
+	WHEN 'U' then 'Edit'
+	WHEN 'D' then 'Deleted'
+	END AS TypeTempDesc
+
+	,case cut.Status
+	WHEN 'WA' then 'Waiting For Approval'
+	WHEN 'WD' then 'Waiting For Delete'
+	WHEN 'A' then 'Approved'
+	WHEN 'R' then 'Rejected'
+	WHEN 'RV' then 'Revision'
+	WHEN 'DR' then 'Draft'
+	WHEN 'SD' then 'Draft'
+	WHEN 'D' then 'Deleted'
+	END AS StatusDesc
+
+	from CustomerUserTemp cut
+
+	left join AspNetUsers cre on cut.CreatedBy=cre.Id
+
+	left join AspNetUsers u on CONVERT(NVARCHAR(MAX),cut.UserId)=u.Id
+
+	--left join ProfileMemberTemp pm on CONVERT(NVARCHAR(MAX),pm.UserId)=cut.UserId
+
+	--left join Profile p on p.Id=pm.ProfileId
+
+	--left join Customer C on cut.BrokerId=C.Id AND C.Id<>0
+
+	where cut.Status=@Status AND cut.CreatedBy = @UserId  
+	--AND pm.TempType<>'D'
+	AND cut.BrokerId <> 0
+END
+
+ELSE
+BEGIN
+SELECT
+	 CONVERT(NVARCHAR(max),cut.Id) as ID
+
+	,CONVERT (NVARCHAR(MAX),cut.UserId) as IdUser
+
+	,cut.Status as curr_status
+
+	,cut.TempType as tipe
+
+	,cut.BrokerId as BrokerId
+
+	,cre.UserID as RequestBy
+
+	,cut.CreatedAt as RequestDate
+
+	,u.Email as email
+
+	,CONVERT (NVARCHAR(MAX),u.PhoneNumber) as Phone
+
+	,u.UserID as userid
+
+	,u.UserName as usernm
+
+	--,pm.ProfileId as profID
+
+   ,(select UserCategory from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id)) as userCategory --p.UserCategory as userCategory
+
+   ,(select Name from Profile where Id=(select top 1 ProfileId from ProfileMemberTemp where UserId=cut.UserId and CustomerUserTempId=cut.Id)) as GroupAccess  --p.Name as GroupAccess
+	
+	, case cut.TempType
+	when 'I' then 'New'
+	WHEN 'U' then 'Edit'
+	WHEN 'D' then 'Deleted'
+	END AS TypeTempDesc
+
+	,case cut.Status
+	WHEN 'WA' then 'Waiting For Approval'
+	WHEN 'WD' then 'Waiting For Delete'
+	WHEN 'A' then 'Approved'
+	WHEN 'R' then 'Rejected'
+	WHEN 'RV' then 'Revision'
+	WHEN 'DR' then 'Draft'
+	WHEN 'SD' then 'Draft'
+	WHEN 'D' then 'Deleted'
+	END AS StatusDesc
+	from CustomerUserTemp cut
+
+	left join AspNetUsers cre on cut.CreatedBy=cre.Id
+
+	left join AspNetUsers u on CONVERT(NVARCHAR(MAX),cut.UserId)=u.Id
+
+	--left join ProfileMemberTemp pm on CONVERT(NVARCHAR(MAX),pm.UserId)=cut.UserId
+
+	--left join Profile p on p.Id=pm.ProfileId
+
+	--left join Customer C on cut.BrokerId=C.Id AND C.Id<>0
+
+	where cut.Status in ('WA', 'A', 'R') AND cut.CreatedBy = @UserId 
+	--AND pm.TempType<>'D'
+	AND cut.BrokerId <> 0
+END
+	
+
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetMyTask_GeneralConversionRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- =============================================
+-- Author:		Aditya WB
+-- Create date: 2021-02-09
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetMyTask_GeneralConversionRate]
+	-- Add the parameters for the stored procedure here
+	@userId as nvarchar(max),
+	@status as nvarchar(50)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	IF @Status='DR'
+	BEGIN
+	SET @Status='SD'
+	END
+    -- Insert statements for procedure here
+	IF @status='REQ'
+	BEGIN
+	SELECT 
+	e.Id,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM ExchangeRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	where e.Status in ('WA','WD') AND e.CreatedBy<>@UserId
+	END
+
+	 ELSE IF  @Status='SD' OR @Status='DR' 
+	 BEGIN 
+	SELECT 
+	e.Id,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.CreatedAt as ModifiedAt,
+	u.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM ExchangeRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	where e.Status=@status AND e.CreatedBy=@UserId
+	 END
+
+	 ELSE IF  @Status='RV' OR @Status='R' OR @Status='A'
+	 BEGIN 
+	SELECT 
+	e.Id,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.ModifiedAt,
+	u1.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM ExchangeRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	where e.Status=@status AND e.CreatedBy=@UserId
+	 END
+
+	 ELSE
+	 BEGIN
+	  SELECT 
+	e.Id,
+	e.CurrencyCode,
+	e.OppositeCurrencyCode,
+	--CONVERT( NVARCHAR(10), e.Rate) as Rate,
+	FORMAT(e.Rate,'#,0.00') as Rate,
+	e.EffectiveFrom,
+	e.EffectiveTo,
+	e.MainId,
+	e.Status,
+	u.UserName as CreatedBy,
+	e.CreatedAt,
+	e.CreatedAt as ModifiedAt,
+	u.UserName as ModifiedBy,
+	e.TypeTran,
+	case e.Status
+	when 'WA' then 'Waiting For Approval'
+	when 'WD' then 'Waiting For Deletion'
+	when 'RV' then 'Need To Revision'
+	when 'SD' then 'Draft'
+	when 'R' then 'Reject'
+	when 'A' then 'Approved'
+	when 'D' then 'Removed'
+	end as StatusDesc,
+	case e.TypeTran
+	when 'I' then 'New'
+	when 'U' then 'Edit'
+	when 'D' then 'Delete'
+	end as RequestType
+	FROM ExchangeRateTemp e
+	INNER JOIN AspNetUsers U on e.CreatedBy=u.Id
+	INNER JOIN AspNetUsers U1 on e.ModifiedBy=u1.Id
+	where e.Status in ('WA','WD') AND e.CreatedBy=@UserId
+	 END
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetOutstandingAPConfiguration]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-01-25
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetOutstandingAPConfiguration]
+	-- Add the parameters for the stored procedure here
+	@BrokerId nvarchar(10)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	DECLARE @UfcId as int
+	set @UfcId=(select Id from OutUploadFileConfig where BrokerID=@BrokerId AND Name='AP' and isActive=1)
+	select 
+	Id,
+	LabelData
+	from OutUploadFileConfigDetail
+	where ConfigID=@UfcId
+END
+
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetOutstandingARConfiguration]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-01-25
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetOutstandingARConfiguration]
+	-- Add the parameters for the stored procedure here
+	@BrokerId nvarchar(10)
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	DECLARE @UfcId as INT
+	set @UfcId=(select Id from OutUploadFileConfig where BrokerID=@BrokerId AND Name='AR' and isActive=1)
+	select 
+	Id,
+	LabelData
+	from OutUploadFileConfigDetail
+	where ConfigID=@UfcId
+END
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetProfileListByBroker]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE PROCEDURE [dbo].[SP_GetProfileListByBroker]
+	--@UserId uniqueidentifier,
+	@BrokerId int
+AS
+	declare @ProfileList table (
+		CategoryID uniqueidentifier,
+		Category varchar(100),
+		UserCategory varchar(255),
+		ProfileId int null,
+		ProfileName varchar(100),
+		--isDefault bit,
+		GroupType varchar(100),
+		[Description] nvarchar(1000),
+		BrokerId int,
+		BrokerName varchar(100),
+		TotalUser int,
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		Status varchar(100),
+		[Type] int,
+		OnQueue bit
+	) 
+	
+	BEGIN
+	insert into @ProfileList
+	SELECT 
+		p.RoleId CategoryID,
+		r.Name Category,
+		p.UserCategory UserCategory, P.Id as ProfileId, P.Name as ProfileName,
+		case when p.isDefault = 1
+			then 'Default'
+			else 'Custom'
+		end as GroupType,
+		P.Description [Description], P.BrokerId, B.Name as BrokerName,  Total.Users as TotalUser, 
+		U1.UserName CreatedBy, P.CreatedAt, U2.UserName ModifiedBy, P.ModifiedAt, P.Status, 1 as [Type],
+		CASE WHEN pt.ProfileId IS NOT NULL
+		   THEN 1
+		   ELSE 0
+       END as OnQueue
+	FROM Profile P
+	LEFT JOIN ProfileTemp pt on P.Id = pt.ProfileId
+	LEFT JOIN Customer B ON B.Id = P.BrokerId
+	left join AspNetUsers U1 on P.CreatedBy = U1.Id
+	left join AspNetUsers U2 on P.ModifiedBy = U2.Id
+	left join AspNetRoles r on p.RoleId = r.Id
+	OUTER APPLY (
+		SELECT COUNT(ProfileId) as Users 
+		FROM ProfileMember PM
+		JOIN CustomerUser UB ON PM.UserId = UB.UserId
+		WHERE PM.ProfileId = P.Id and UB.Status = 'A') as Total
+	WHERE 
+		--P.Id NOT IN (SELECT ProfileId FROM ProfileTemp WHERE ProfileId is not null ) and
+		P.Id <> 1
+--UNION
+--	SELECT 
+--		--case when p.BrokerId = 0
+--		--	then 'Banker'
+--		--	else 'Customer'
+--		--end as Category,
+--		p.RoleId CategoryID,
+--		r.Name Category,
+--		p.UserCategory UserCategory, P.Id as ProfileId, P.Name as ProfileName, 
+--		case when p.isDefault = 1
+--			then 'Default'
+--			else 'Custom'
+--		end as GroupType,
+--		P.Description [Description], P.BrokerId, B.Name as BrokerName, Total.Users as TotalUser, 
+--		U1.UserName CreatedBy, P.CreatedAt, U2.UserName ModifiedBy, P.ModifiedAt, P.Status, 2 as [Type]
+--	FROM ProfileTemp P
+--	LEFT JOIN Customer B ON B.Id = P.BrokerId
+--	left join AspNetUsers U1 on P.CreatedBy = U1.Id
+--	left join AspNetUsers U2 on P.ModifiedBy = U2.Id
+--	left join AspNetRoles r on p.RoleId = r.Id
+--	OUTER APPLY (
+--		SELECT COUNT(ProfileId) as Users 
+--		FROM ProfileMember PM
+--		JOIN CustomerUser UB ON PM.UserId = UB.UserId
+--		WHERE PM.ProfileId = P.ProfileId and UB.Status = 'A') as Total
+	END
+	IF @BrokerId = 0
+
+	BEGIN 
+
+	SELECT * FROM @ProfileList
+	order by ModifiedAt desc
+	END
+
+	ELSE 
+
+	BEGIN
+	
+	SELECT * FROM @ProfileList WHERE BrokerId = @BrokerId
+	order by ModifiedAt desc
+	END
+	 
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetProfileListByBrokerApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetProfileListByBrokerApproval]
+	@User nvarchar(50),
+	@DataType nvarchar(50),
+	@BrokerId int
+AS
+	declare @ProfileList table (
+		CategoryID uniqueidentifier,
+		Category varchar(100),
+		UserCategory varchar(255),
+		ProfileId int null,
+		ProfileName varchar(100),
+		--isDefault bit,
+		GroupType varchar(100),
+		[Description] nvarchar(1000),
+		RequestType varchar(100) null,
+		BrokerId int,
+		BrokerName varchar(100),
+		TotalUser int,
+		CreatedBy varchar(100),
+		CreatedAt DateTime,
+		ModifiedBy varchar(100),
+		ModifiedAt DateTime,
+		Status varchar(100),
+		[Type] int
+	) 
+	
+	BEGIN
+	insert into @ProfileList
+	SELECT 
+		--case when p.BrokerId = 0
+		--	then 'Banker'
+		--	else 'Customer'
+		--end as Category,
+		p.RoleId CategoryID,
+		r.Name Category,
+		p.UserCategory UserCategory, P.Id as ProfileId, P.Name as ProfileName, 
+		case when p.isDefault = 1
+			then 'Default'
+			else 'Custom'
+		end as GroupType,
+		P.Description [Description],
+		Case when P.ProfileId is null and P.Status = 'WA'
+			then 'New'
+			when P.ProfileId is not null and P.Status = 'WA'
+			then 'Update'
+			when P.ProfileId is not null and P.Status = 'WD'
+			then 'Delete'
+		end as RequestType,
+		P.BrokerId, B.Name as BrokerName, Total.Users as TotalUser, 
+		U1.UserName CreatedBy, P.CreatedAt, U2.UserName ModifiedBy, P.ModifiedAt, P.Status, 2 as [Type]
+	FROM ProfileTemp P
+	LEFT JOIN Customer B ON B.Id = P.BrokerId
+	left join AspNetUsers U1 on P.CreatedBy = U1.Id
+	left join AspNetUsers U2 on P.ModifiedBy = U2.Id
+	left join AspNetRoles r on p.RoleId = r.Id
+	OUTER APPLY (
+		SELECT COUNT(ProfileId) as Users 
+		FROM ProfileMember PM
+		JOIN CustomerUser UB ON PM.UserId = UB.UserId
+		WHERE PM.ProfileId = P.ProfileId and UB.Status = 'A') as Total
+	END
+
+	
+
+	IF @BrokerId = 0
+		BEGIN 
+			IF @DataType = 'My Draft' or @DataType = '3'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where CreatedBy = @User and Status = 'DR'
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'My Revision' or @DataType = '4'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where CreatedBy = @User and Status = 'RV'
+					order by ModifiedAt desc
+				END
+			ELSE IF (@DataType = 'My Request' or @DataType = '5')
+				BEGIN
+				SELECT * FROM @ProfileList
+					where CreatedBy = @User and (Status in ('WA', 'WD'))
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'To Be Approved' or @DataType = '6'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where CreatedBy != @User and Status in ( 'WA', 'WD')
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'All' or @DataType = '2'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where Status not in ('R', 'D', 'DR')
+					order by ModifiedAt desc
+				END
+		END
+	ELSE
+		BEGIN
+			IF @DataType = 'My Draft' or @DataType = '3'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where BrokerId = @BrokerId and CreatedBy = @User and Status = 'DR'
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'My Revision' or @DataType = '4'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where BrokerId = @BrokerId and CreatedBy = @User and Status = 'RV'
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'My Request' or @DataType = '5'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where BrokerId = @BrokerId and CreatedBy = @User and (Status in ('WA', 'WD'))
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'To Be Approved' or @DataType = '6'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where BrokerId = @BrokerId and CreatedBy != @User and Status in ( 'WA', 'WD')
+					order by ModifiedAt desc
+				END
+			ELSE IF @DataType = 'All' or @DataType = '2'
+				BEGIN
+				SELECT * FROM @ProfileList
+					where BrokerId = @BrokerId and Status not in ('R', 'D', 'DR')
+					order by ModifiedAt desc
+				END
+		END
+	 
+RETURN 0
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetProfileUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+-- =============================================
+-- Author:		Bima
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetProfileUpload]
+	-- Add the parameters for the stored procedure here
+	@BulkId as UNIQUEIDENTIFIER
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	ID,
+	PBulkId,
+	UserCategory,
+	Category,
+	[Name] [ProfileName],
+	[Description],
+	[Menu],
+	[Screen],
+	[Create],
+	[Read],
+	[Update],
+	[Delete],
+	[Approve],
+	[Upload],
+	[Export],
+	[RemoveRequest],
+	CreatedBy,
+	CreatedAt,
+    CONVERT(bit,IsExisting) as IsExisting,
+	ErrorMessage
+	from ProfileUpload where PBulkId=@BulkId
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetSpecificRateUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetSpecificRateUpload]
+	-- Add the parameters for the stored procedure here
+	@BulkId as UNIQUEIDENTIFIER
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	s.Id,
+	s.ClientCode,
+	c.ClientName,
+	s.CurrencyCode,
+	s.OppositeCurrencyCode,
+	s.Rate,
+	s.EffectiveFrom,
+	s.EffectiveTo,
+	s.CustomerId,
+	s.CreatedAt,
+	s.CreatedBy,
+    CONVERT(bit,s.IsExisting) as IsExisting,
+	s.ErrorMessage,
+	s.PBulkId
+	from SpecificConversionRateUpload s
+	INNER JOIN ARCounterpart c
+	on s.ClientCode=c.ClientCd
+
+	where s.PBulkId=@BulkId
+END
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUploadedAPCdm]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUploadedAPCdm]
+	-- Add the parameters for the stored procedure here
+	@IdBulk as UNIQUEIDENTIFIER,
+	@IsExisting as bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	select 
+	a.Id,
+	a.CustomerID,
+	a.Entity,
+	a.CounterpartCode,
+	a.CounterpartName,
+	a.Branch,
+	a.Email,
+	a.Email2,
+	a.Country,
+	c.Name as CountryName,
+	a.Address,
+	a.City,
+	a.PostalCode,
+	a.IsEnableAccessMore,
+	CASE a.IsEnableAccessMore
+	when 'True' then 'Yes'
+	when 'False' then 'No'
+	END as EnableAccessMore,
+	a.IsRegisterAsAR,
+	CASE a.IsRegisterAsAR
+	when 'True' then 'Yes'
+	when 'False' then 'No'
+	END as RegisterAsAR,
+
+	a.CreatedAt,
+	a.CreatedBy,
+	a.ErrorMessage,
+	a.PBulkId,
+	a.IsExisting,
+	a.UserId,
+	a.UserName,
+	a.UserEmail
+	from APCounterpart_Upload a
+	LEFT OUTER JOIN Country c
+	on a.Country=c.Id
+	where PBulkId=@IdBulk and IsExisting=@IsExisting
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUploadedARCdm]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUploadedARCdm]
+	-- Add the parameters for the stored procedure here
+	@IdBulk as UNIQUEIDENTIFIER,
+	@IsExisting as bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	select 
+	a.Id,
+	a.CustomerID,
+	a.EntityName,
+	a.ClientCd,
+	a.ClientName,
+	a.BranchName,
+	a.Email,
+	a.Email2,
+	a.Country,
+	c.Name as CountryName,
+	a.GroupCode,
+	a.City,
+	
+	a.CreatedAt,
+	a.CreatedBy,
+	a.ErrorMessage,
+	a.PBulkId,
+	a.IsExisting
+	
+	from ARCounterpartUpload a
+	LEFT OUTER JOIN Country c
+	on a.Country=c.Id
+	where PBulkId=@IdBulk and IsExisting=@IsExisting
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUploadedExchangeRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUploadedExchangeRate]
+	-- Add the parameters for the stored procedure here
+	@IdBulk as UNIQUEIDENTIFIER,
+	@IsExisting as bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	g.Id,
+	g.CreatedAt,
+	g.CreatedBy,
+	g.CurrencyCode,
+	g.CustomerId,
+	g.EffectiveFrom,
+	g.EffectiveTo,
+	g.ErrorMessage,
+	g.IsExisting,
+	g.OppositeCurrencyCode,
+	g.PBulkId,
+	g.Rate
+	from ExchangeRateUpload g
+	where PBulkId=@IdBulk and IsExisting=@IsExisting
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUploadedSpecificConversionRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUploadedSpecificConversionRate]
+	-- Add the parameters for the stored procedure here
+	@IdBulk as UNIQUEIDENTIFIER,
+	@IsExisting as bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	SELECT 
+	g.Id,
+	g.ClientCode,
+	a.ClientName as ClientName,
+	g.CreatedAt,
+	g.CreatedBy,
+	g.CurrencyCode,
+	g.CustomerId,
+	g.EffectiveFrom,
+	g.EffectiveTo,
+	g.ErrorMessage,
+	g.IsExisting,
+	g.OppositeCurrencyCode,
+	g.PBulkId,
+	g.Rate
+	from SpecificConversionRateUpload g
+	LEFT OUTER JOIN ARCounterpart a on g.ClientCode=a.ClientCd
+	where PBulkId=@IdBulk and IsExisting=@IsExisting
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUploadedVa]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: <Create Date,,>
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUploadedVa]
+	-- Add the parameters for the stored procedure here
+	@IdBulk as UNIQUEIDENTIFIER,
+	@IsExisting as bit
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	select 
+	a.Id,
+	a.AccountNumber,
+	a.CurrencyCode,
+	a.Code,
+	a.ClientNumber,
+	a.CreatedAt,
+	a.CreatedBy,
+	a.ErrorMessage,
+	a.PBulkId,
+	a.IsExisting
+	
+	from VirtualAccountUpload a
+	
+	where PBulkId=@IdBulk and IsExisting=@IsExisting
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUserAPCDM]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-03-17
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUserAPCDM]
+	-- Add the parameters for the stored procedure here
+	@CounterpartId as UNIQUEIDENTIFIER
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	select 
+apu.Id,
+apu.UserId,
+apu.UserName,
+apu.Email,
+CASE cu.Status
+when 'UC' then 'INACTIVE'
+when 'NA' then 'Blocked'
+when 'L' then 'Active (Locked)'
+when 'A' then 'Active'
+END AS UserStatus,
+--cu.Status as UserStatus,
+apu.CreatedAt,
+apu.CreatedBy,
+apu.ModifiedAt,
+apu.ModifiedBy
+from APCounterpart_UserTemp apu 
+LEFT OUTER JOIN AspNetUsers u on apu.UserId=u.UserID
+LEFT OUTER JOIN CustomerUser cu on u.Id=cu.UserId
+where apu.APCounterpart=@CounterpartId 
+and apu.Status=(select Status from APCounterpartTemp where Id=apu.APCounterpart)  --(apu.Status<>'D' AND apu.Status<>'R')
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUserAPCDM_Main]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- =============================================
+-- Author:		Aditya Wahyu B
+-- Create date: 2021-03-17
+-- Description:	<Description,,>
+-- =============================================
+CREATE PROCEDURE [dbo].[SP_GetUserAPCDM_Main]
+	-- Add the parameters for the stored procedure here
+	@CounterpartId as UNIQUEIDENTIFIER
+AS
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+
+    -- Insert statements for procedure here
+	select 
+apu.Id,
+apu.UserId,
+apu.UserName,
+apu.Email,
+CASE cu.Status
+when 'UC' then 'INACTIVE'
+when 'NA' then 'Blocked'
+when 'L' then 'Active (Locked)'
+when 'A' then 'Active'
+END AS UserStatus,
+--cu.Status as UserStatus,
+apu.CreatedAt,
+apu.CreatedBy,
+apu.ModifiedAt,
+apu.ModifiedBy
+from APCounterpart_User apu 
+LEFT OUTER JOIN AspNetUsers u on apu.UserId=u.UserName
+LEFT OUTER JOIN CustomerUser cu on u.Id=cu.UserId
+where apu.APCounterpart=@CounterpartId and apu.Status<>'D'
+END
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUserInsurance]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_GetUserInsurance]
+	@insuranceId uniqueidentifier
+AS
+	declare @mainID uniqueidentifier = (select InsuranceId from InsuranceTemp where Id = @insuranceId)
+
+	IF @mainID != CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER)
+	
+	BEGIN
+
+	select UB.Id, UB.UserId, UB.BrokerId, UB.InsuranceId, UB.Status from CustomerUser UB
+	left join UserBrokerTemp UBT on UB.UserId = UBT.UserId
+	where UB.InsuranceId = @mainID and UB.Status <> 'UA' and UBT.UserId IS NULL
+	union
+	select UB.Id, UB.UserId, UB.BrokerId, UB.InsuranceId, UB.Status from UserBrokerTemp UB
+	where UB.InsuranceId = @insuranceId and UB.Status <> 'UA'
+
+	END
+
+	ELSE
+
+	BEGIN
+
+	select UB.Id, UB.UserId, UB.BrokerId, UB.InsuranceId, UB.Status from CustomerUser UB
+	where UB.InsuranceId = @insuranceId and UB.Status <> 'UA'
+	union
+	select UB.Id, UB.UserId, UB.BrokerId, UB.InsuranceId, UB.Status from UserBrokerTemp UB
+	left join CustomerUser UBT on UB.UserId = UBT.UserId
+	where UB.InsuranceId = @insuranceId and UB.Status <> 'UA' and UBT.UserId IS NULL
+	
+	END
+	 
+RETURN 0
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUserList]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetUserList]
+	--@UserId uniqueidentifier,
+	--@BrokerId int
+AS
+	declare @UserList table (
+		ID uniqueidentifier,
+		UserID varchar(100),
+		UserName varchar(100),
+		Email varchar(100),
+		ProfileName varchar(100),
+		RoleId varchar(100),
+		Rolename varchar(100),
+		BrokerId int
+	) 
+	
+	BEGIN
+	insert into @UserList
+	SELECT
+		U.Id as ID,
+		U.UserID as UserID,
+		U.UserName as UserName,
+		U.Email as Email,
+		pm.ProfileId as ProfileName,
+		ur.RoleId as RoleId,
+		r.Name as Rolename,
+		U.BrokerID as BrokerId
+	from AspNetUsers u
+		left join AspNetUserRoles ur on u.Id = ur.UserId 
+		left join AspNetRoles r on ur.RoleId = r.Id
+		left join ProfileMember pm on u.Id = pm.UserId
+		left join CustomerUserTemp cut on u.Id = cut.UserId
+		left join ProfileMemberTemp pmt on u.id = pmt.UserId
+	where pm.UserId is null and r.Name in ('Banker', 'Customer')
+		and cut.UserId is null and pmt.UserId is null
+	END
+
+	--IF @BrokerId = 0
+
+	BEGIN 
+
+	SELECT * FROM @UserList
+
+	END
+
+	--ELSE
+
+	--BEGIN
+	
+	--SELECT * FROM @UserList WHERE BrokerId = @BrokerId
+
+	--END
+	 
+RETURN 0
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_GetUserMenuSetting]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE PROCEDURE [dbo].[SP_GetUserMenuSetting]
+AS
+	SELECT M.Id as MenuId, M.Name as MenuName, M.Parent,
+		CONVERT(bit,0) as [Read],
+		CONVERT(bit,0) as [Create],
+		CONVERT(bit,0) as [Update],
+		CONVERT(bit,0) as [Delete],
+		CONVERT(bit,0) as [Approve],
+		CASE  
+			--WHEN M.Id = 9 THEN CONVERT(bit, 0)
+			WHEN M.Parent = 0 THEN CONVERT(bit,1) 
+			ELSE CONVERT(bit,0) 
+		END AS isParent, 
+		SubParent AS isSubParent ,
+		M.Seq
+	FROM Menu M
+	 
+RETURN 0
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Home_Card]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+-- CODE HERE --
+CREATE PROC [dbo].[SP_Home_Card] @BrokerId VARCHAR(50)
+	,@IndustryId INT
+	,@UserId UNIQUEIDENTIFIER
+AS
+BEGIN
+	IF @BrokerId = 0
+	BEGIN
+		SELECT *
+		FROM (
+			SELECT 83 MenuID
+				,CAST((
+						SELECT COUNT(1)
+						FROM SystemParameter
+						WHERE [Status2] = 'A'
+						) AS BIGINT) JmlDataActive
+				,CAST((
+						SELECT COUNT(1)
+						FROM SystemParameterTemp
+						WHERE Status2 = 'WA'
+						) AS BIGINT) JmlDataPending
+				,(
+					SELECT [Name]
+					FROM Menu
+					WHERE Id = 83
+					) Module
+				,'SystemParameter/Index' ControllerActive
+				,'MyTask/Task?param=SystemParameter' ControllerPending
+				,'bg-success' Background
+				,1 Seq
+			--from SystemParameter where Status = 1  
+			
+			UNION
+			
+			SELECT 27
+				,CAST((
+						SELECT COUNT(1)
+						FROM Customer
+						WHERE Id <> 1
+							AND Subcribed = 1
+						) AS BIGINT) JmlDataActive
+				,CAST((
+						SELECT COUNT(1)
+						FROM CustomerTemp
+						WHERE [Status] IN ('WA', 'WD', 'RV')
+						) AS BIGINT) JmlDataPending
+				,(
+					SELECT [Name]
+					FROM Menu
+					WHERE Id = 27
+					) Module
+				,'Customer/Index'
+				,'MyTask/Task?param=Customer'
+				,'bg-danger'
+				,2
+			--from Customer where Status='A'  
+			
+			UNION
+			
+			SELECT 81
+				,CAST((
+						SELECT COUNT(1)
+						FROM PROFILE
+						WHERE Id <> 1
+						) AS BIGINT) JmlDataActive
+				,CAST((
+						SELECT COUNT(1)
+						FROM ProfileTemp
+						WHERE [Status] IN (
+								'WA'
+								,'WD','RV'
+								)
+						) AS BIGINT) JmlDataPending
+				,(
+					SELECT [Name]
+					FROM Menu
+					WHERE Id = 81
+					) Module
+				,'UserRoles/Index'
+				,'MyTask/Task?param=UserRoles'
+				,'bg-warning'
+				,3
+			--from Profile where Status='A'   
+			
+			UNION
+			
+			SELECT 84
+				,CAST((
+						SELECT COUNT(1)
+						FROM EmailTemplate
+						) AS BIGINT) JmlDataActive
+				,CAST((
+						SELECT COUNT(1)
+						FROM EmailTemplateTemp
+						WHERE [Status] IN (
+								'WA'
+								,'WD','RV'
+								)
+						) AS BIGINT) JmlDataPending
+				,(
+					SELECT [Name]
+					FROM Menu
+					WHERE Id = 84
+					) Module
+				,'EmailTemplate/Index'
+				,'MyTask/Task?param=EmailTemplate'
+				,'bg-info'
+				,4
+			--from EmailTemplate where Status='A' 
+			
+			UNION
+			
+			SELECT 82
+				,CAST((
+						SELECT COUNT(1)
+						FROM CustomerUser CU
+						INNER JOIN AspNetUserRoles UR ON CU.UserId = UR.UserId
+						INNER JOIN AspNetRoles R ON UR.RoleId = R.Id
+						WHERE CU.UserId <> @UserId
+							AND CU.[Status] IN (
+								'A'
+								,'L'
+								)
+							AND R.[Name] = 'Banker'
+						) AS BIGINT) JmlDataActive
+				,CAST((
+						SELECT COUNT(1)
+						FROM CustomerUserTemp CUT
+						INNER JOIN AspNetUserRoles UR ON CUT.UserId = UR.UserId
+						INNER JOIN AspNetRoles R ON UR.RoleId = R.Id
+						WHERE CUT.[TempStatus] IN (
+								'WA'
+								,'WD'
+								,'RV'
+								)
+							AND R.[Name] = 'Banker'
+						) AS BIGINT) JmlDataPending
+				,(
+					SELECT [Name]
+					FROM Menu
+					WHERE Id = 82
+					) Module
+				,'UserAccess/Index'
+				,'MyTask/Task?param=UserAccess'
+				,'bg-warning'
+				,5
+				--from CustomerUser where Status='A'
+			) a
+		ORDER BY Seq ASC
+	END
+	ELSE
+	BEGIN
+		IF EXISTS (
+				SELECT 1
+				FROM MenuByIndustry
+				WHERE IndustryID = @IndustryId
+				)
+		BEGIN
+			SELECT *
+			FROM (
+				SELECT 21 MenuID
+					,CAST((
+							SELECT COUNT(1)
+							FROM VirtualAccount
+							WHERE [STATUS] = 'A'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM VirtualAccountTemp
+							WHERE [Status] IN (
+									'WA'
+									,'WD'
+									,'RV'
+									)
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 21
+						) Module
+					,'VirtualAccountDataManagement/Index' ControllerActive
+					,'MyTask/Task?param=VirtualAccountDataManagement' ControllerPending
+					,'bg-success' Background
+					,1 Seq
+				--from VirtualAccount where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending VA
+				
+				SELECT 25
+					,CAST((
+							SELECT COUNT(1)
+							FROM APCounterpart
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM APCounterpartTemp
+							WHERE [Status] != 'DR'
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 25
+						) Module
+					,'ARCounterPartDM/Index' ControllerActive
+					,'MyTask/Task?param=ARCounterPartDM'
+					,'bg-warning'
+					,2
+				--from Client where Status='NA' and BrokerId=@BrokerId  
+				
+				UNION
+				
+				SELECT 41
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.Invoice
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.InvoiceTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 41
+						) Module
+					,'Invoice/Index' ControllerActive
+					,'MyTask/Task?param=Invoice'
+					,'bg-warning'
+					,3
+				--from MORE2_Trans.dbo.Invoice where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending Invoice
+				
+				SELECT 42
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.Invoice
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.InvoiceTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 42
+						) Module
+					,'Invoice/Settlement/Index' ControllerActive
+					,'MyTask/Task?param=Invoice'
+					,'bg-warning'
+					,4
+				--from MORE2_Trans.dbo.Invoice where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending Invoice
+				
+				SELECT 23
+					,CAST((
+							SELECT COUNT(1)
+							FROM Tolerance
+							WHERE BrokerId = @BrokerId
+								AND [Status] = 'A'
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM ToleranceTemp
+							WHERE [Status] IN (
+									'WA'
+									,'WD'
+									,'RV'
+									)
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 23
+						) Module
+					,'ToleranceDataManagement/Index' ControllerActive
+					,'MyTask/Task?param=ToleranceDataManagement'
+					,'bg-danger'
+					,5
+				--from ToleranceTemp where Status='WA' and BrokerId=@BrokerId 
+				
+				UNION --Pending Tolerance
+				
+				SELECT 26
+					,CAST((
+							SELECT COUNT(1)
+							FROM Customer
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM CustomerTemp
+							WHERE [Status] IN ('WA', 'WD', 'RV')
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 26
+						) Module
+					,'APCounterPartDataManagement/Index' ControllerActive
+					,'MyTask/Task?param=APCounterPartDataManagement'
+					,'bg-info'
+					,6
+				--from CustomerTemp where BrokerId=@BrokerId 
+				
+				UNION
+				
+				SELECT 51
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlip
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlipTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 51
+						) Module
+					,'PlacingSlip/Index' ControllerActive
+					,'MyTask/Task?param=PlacingSlip'
+					,'bg-info'
+					,7
+				--from MORE2_Trans.dbo.PlacingSlipTemp PS WITH(NOLOCK)
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInsuranceTemp] PSI WITH(NOLOCK) ON PS.PlacingSlipId = PSI.PlacingSlipId
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInstallmentTemp] PSN WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSN.PlacingSlipInsuranceId
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipPolicyNumberTemp] PSP WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSP.PlacingSlipInsuranceId
+				----INNER JOIN [MORE_Trans].[dbo].[PaymentInvoiceTemp] PIN WITH(NOLOCK) ON PS.PlacingSlipId = PIN.PlacingSlipId AND PSN.PlacingSlipInstallmentId = PIN.InstallmentId AND PIN.TypeOfAccount = N'AP'
+				--where PS.Status='WA' and BrokerId=@BrokerId 
+				
+				UNION
+				
+				SELECT 52
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlip
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlipTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT IndustryMenuText
+						FROM MenuByIndustry
+						WHERE IndustryID = @IndustryId
+							AND MenuID = 52
+						) Module
+					,'PlacingSlip/UploadSettlement/Index' ControllerActive
+					,'MyTask/Task?param=PlacingSlip'
+					,'bg-info'
+					,8
+					--from MORE2_Trans.dbo.PlacingSlip PS WITH(NOLOCK)
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInsuranceTemp] PSI WITH(NOLOCK) ON PS.PlacingSlipId = PSI.PlacingSlipId
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInstallmentTemp] PSN WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSN.PlacingSlipInsuranceId
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipPolicyNumberTemp] PSP WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSP.PlacingSlipInsuranceId
+					----INNER JOIN [MORE_Trans].[dbo].[PaymentInvoiceTemp] PIN WITH(NOLOCK) ON PS.PlacingSlipId = PIN.PlacingSlipId AND PSN.PlacingSlipInstallmentId = PIN.InstallmentId AND PIN.TypeOfAccount = N'AP'
+					--where PS.Status='WA' and BrokerId=@BrokerId
+					/*
+				union --Pending PlacingSlip
+
+				select 
+					Count(*),
+					'Invoice Payment Confirmation',
+					'Invoice/PaymentConfirmation/3',
+					'bg-success',
+					7  
+					from (
+					select InvoiceId,TypeOfAccount from MORE_Trans.dbo.PaymentInvoice where Status !='FS' union all
+					select InvoiceId,TypeOfAccount from MORE_Trans.dbo.PaymentInvoiceTemp where Status !='FS' 
+				)a 
+				join MORE_Trans.dbo.Invoice b on a.InvoiceId=b.Id where TypeOfAccount='AR' and BrokerId=@BrokerId
+		
+				union --Pending Invoice Payment
+
+				select distinct Count(*),'Policy Number Completion','PlacingSlip','bg-danger',8  
+				from MORE_Trans.dbo.PlacingSlip a 
+					left join MORE_Trans.dbo.PlacingSlipInsurance b on a.Id=b.PlacingSlipId 
+					left join MORE_Trans.dbo.PlacingSlipPolicyNumber c on b.Id=c.PlacingSlipInsuranceId
+				where PolicyNumber is null and BrokerId=@BrokerId --Pending PolicyNumber
+				*/
+				) a
+			ORDER BY Seq ASC
+		END
+		ELSE
+		BEGIN
+			SELECT *
+			FROM (
+				SELECT 21 MenuID
+					,CAST((
+							SELECT COUNT(1)
+							FROM VirtualAccount
+							WHERE [status] = 'A'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM VirtualAccountTemp
+							WHERE [Status] IN (
+									'WA'
+									,'WD'
+									,'RV'
+									)
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 21
+						) Module
+					,'VirtualAccountDataManagement/Index' ControllerActive
+					,'MyTask/Task?param=VirtualAccountDataManagement' ControllerPending
+					,'bg-success' Background
+					,1 Seq
+				--from VirtualAccount where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending VA
+				
+				SELECT 25
+					,CAST((
+							SELECT COUNT(1)
+							FROM ARCounterpart
+							WHERE CustomerID = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM ARCounterpartTemp
+							WHERE [Status] != 'DR'
+								AND CustomerID = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 25
+						) Module
+					,'ARCounterpartDM/Index'
+					,'MyTask/Task?param=ARCounterpartDM'
+					,'bg-warning'
+					,2
+				--from Client where Status='NA' and BrokerId=@BrokerId  
+				
+				UNION --Pending Client
+				
+				SELECT 41
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.Invoice
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.InvoiceTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 41
+						) Module
+					,'Invoice/Index'
+					,'MyTask/Task?param=Invoice'
+					,'bg-warning'
+					,3
+				--from MORE2_Trans.dbo.Invoice where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending Invoice
+				
+				SELECT 42
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.Invoice
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.InvoiceTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 42
+						) Module
+					,'Invoice/Settlement/Index'
+					,'MyTask/Task?param=Invoice'
+					,'bg-warning'
+					,4
+				--from MORE2_Trans.dbo.Invoice where Status='P' and BrokerId=@BrokerId 
+				
+				UNION --Pending Invoice
+				
+				SELECT 23
+					,CAST((
+							SELECT COUNT(1)
+							FROM Tolerance
+							WHERE BrokerId = @BrokerId
+								AND [Status] = 'A'
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM ToleranceTemp
+							WHERE [Status] IN (
+									'WA'
+									,'WD'
+									,'RV'
+									)
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 23
+						) Module
+					,'ToleranceDataManagement/Index'
+					,'MyTask/Task?param=ToleranceDataManagement'
+					,'bg-danger'
+					,5
+				--from ToleranceTemp where Status='WA' and BrokerId=@BrokerId 
+				
+				UNION --Pending Tolerance
+				
+				SELECT 26
+					,CAST((
+							SELECT COUNT(1)
+							FROM Customer where [Status] = 'A'
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM CustomerTemp
+							WHERE [Status]  IN ('WA', 'WD', 'RV')
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 26
+						) Module
+					,'APCounterPartDataManagement/Index'
+					,'MyTask/Task?param=APCounterPartDataManagement'
+					,'bg-info'
+					,6
+				--from CustomerTemp where BrokerId=@BrokerId 
+				
+				UNION --Pending Insurance 
+				
+				SELECT 51
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlip
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlipTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 51
+						) Module
+					,'PlacingSlip/Index'
+					,'MyTask/Task?param=PlacingSlip'
+					,'bg-info'
+					,7
+				--from MORE2_Trans.dbo.PlacingSlip PS WITH(NOLOCK)
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInsuranceTemp] PSI WITH(NOLOCK) ON PS.PlacingSlipId = PSI.PlacingSlipId
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInstallmentTemp] PSN WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSN.PlacingSlipInsuranceId
+				----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipPolicyNumberTemp] PSP WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSP.PlacingSlipInsuranceId
+				----INNER JOIN [MORE_Trans].[dbo].[PaymentInvoiceTemp] PIN WITH(NOLOCK) ON PS.PlacingSlipId = PIN.PlacingSlipId AND PSN.PlacingSlipInstallmentId = PIN.InstallmentId AND PIN.TypeOfAccount = N'AP'
+				--where PS.Status='WA' and BrokerId=@BrokerId 
+				
+				UNION
+				
+				SELECT 52
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlip
+							WHERE BrokerId = @BrokerId
+							) AS BIGINT) JmlDataActive
+					,CAST((
+							SELECT COUNT(1)
+							FROM MORE2_Trans.dbo.PlacingSlipTemp
+							WHERE [Status] != 'DR'
+								AND BrokerId = @BrokerId
+							) AS BIGINT) JmlDataPending
+					,(
+						SELECT [Name]
+						FROM Menu
+						WHERE Id = 52
+						) Module
+					,'PlacingSlip/UploadSettlement/Index'
+					,'MyTask/Task?param=PlacingSlip'
+					,'bg-info'
+					,8
+					--from MORE2_Trans.dbo.PlacingSlip PS WITH(NOLOCK)
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInsuranceTemp] PSI WITH(NOLOCK) ON PS.PlacingSlipId = PSI.PlacingSlipId
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipInstallmentTemp] PSN WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSN.PlacingSlipInsuranceId
+					----INNER JOIN [MORE_Trans].[dbo].[PlacingSlipPolicyNumberTemp] PSP WITH(NOLOCK) ON PSI.PlacingSlipInsuranceId = PSP.PlacingSlipInsuranceId
+					----INNER JOIN [MORE_Trans].[dbo].[PaymentInvoiceTemp] PIN WITH(NOLOCK) ON PS.PlacingSlipId = PIN.PlacingSlipId AND PSN.PlacingSlipInstallmentId = PIN.InstallmentId AND PIN.TypeOfAccount = N'AP'
+					--where PS.Status='WA' and BrokerId=@BrokerId
+					/*
+				union --Pending PlacingSlip
+
+				select 
+					Count(*),
+					'Invoice Payment Confirmation',
+					'Invoice/PaymentConfirmation/3',
+					'bg-success',
+					7  
+					from (
+					select InvoiceId,TypeOfAccount from MORE_Trans.dbo.PaymentInvoice where Status !='FS' union all
+					select InvoiceId,TypeOfAccount from MORE_Trans.dbo.PaymentInvoiceTemp where Status !='FS' 
+				)a 
+				join MORE_Trans.dbo.Invoice b on a.InvoiceId=b.Id where TypeOfAccount='AR' and BrokerId=@BrokerId
+		
+				union --Pending Invoice Payment
+
+				select distinct Count(*),'Policy Number Completion','PlacingSlip','bg-danger',8  
+				from MORE_Trans.dbo.PlacingSlip a 
+					left join MORE_Trans.dbo.PlacingSlipInsurance b on a.Id=b.PlacingSlipId 
+					left join MORE_Trans.dbo.PlacingSlipPolicyNumber c on b.Id=c.PlacingSlipInsuranceId
+				where PolicyNumber is null and BrokerId=@BrokerId --Pending PolicyNumber
+				*/
+				) a
+			ORDER BY Seq ASC
+		END
+	END
+END
+	-- END CODE HERE --
+	-- VERSION [20200130.01]
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Insurance_ApproveAll]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE 
+PROC [dbo].[SP_Insurance_ApproveAll]
+(
+	@IDs VARCHAR(MAX),
+	@Type INT,
+	@StatusIns varchar(2),
+	@StatusClient varchar(2),
+	@UserID UNIQUEIDENTIFIER,
+	@BrokerID INT
+)
+AS
+BEGIN TRAN
+BEGIN TRY
+	DECLARE @DataCounter INT, @GuidEmpty UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER), @ProfileId INT, @ProfileName VARCHAR(60) = 'Policy Number Uploader'
+	SELECT @DataCounter = COUNT(Id) 
+	FROM InsuranceTemp 
+	WHERE Id IN (
+		SELECT Data 
+		FROM dbo.fnSplitString(@IDs,',')
+	)
+	SELECT TOP 1 @ProfileId = Id FROM Profile WHERE BrokerId = @BrokerId AND Name = @ProfileName
+
+	/**
+		Approve = Insert to/Update main data
+	*/
+	IF @Type = 1
+	BEGIN
+		/**
+			Update Existing Insurance
+		*/
+		-- Insurance table
+		UPDATE I SET
+			I.BranchLocCode = IT.BranchLocCode,
+			I.InsurerBranch = IT.InsurerBranch,
+			I.Name = IT.Name,
+			I.Email = IT.Email,
+			I.Email2 = IT.Email2,
+			I.Address = IT.Address,
+			I.PostCode = IT.PostCode,
+			I.CityCode = IT.CityCode,
+			I.CountryCode = IT.CountryCode,
+			I.EnableDirectbilling = IT.EnableDirectbilling,
+			I.EnableAccessToMore = IT.EnableAccessToMore,
+			I.ModifiedAt = GETDATE(),
+			I.ModifiedBy = @UserID
+		FROM Insurance I
+		INNER JOIN InsuranceTemp IT ON I.Id = IT.InsuranceId
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		)
+
+		-- Client table
+		UPDATE C SET
+			C.BranchLocCode = CT.BranchLocCode,
+			C.Code = CT.Code,
+			C.Name = CT.Name,
+			C.Email1 = CT.Email1,
+			C.Email2 = CT.Email2,
+			C.CityCode = CT.CityCode,
+			C.CountryCode = CT.CountryCode,
+			C.IsInsurance = CASE WHEN IT.EnableDirectbilling = 1 THEN 1 ELSE 0 END,
+			C.ModifiedAt = GETDATE(),
+			C.ModifiedBy = @UserID
+		FROM Client C
+		INNER JOIN ClientTemp CT ON C.Id = CT.ClientId
+		INNER JOIN InsuranceTemp IT ON CT.InsuranceId = IT.Id
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId IN (
+			SELECT Id
+			FROM Insurance
+		)
+
+		INSERT INTO Client(Id, Code, ParentCode, GroupCode, IndustryId, BranchLocCode, Name, Email1, CountryCode, CityCode, Phone, IsHeadOffice, IsInsurance, InsuranceId, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+		SELECT NEWID(), CT.Code, CT.ParentCode, CT.GroupCode, CT.IndustryId, CT.BranchLocCode, CT.Name, CT.Email1, CT.CountryCode, CT.CityCode, CT.Phone, CT.IsHeadOffice, CT.IsInsurance, IT.InsuranceId, @StatusClient, CT.CreatedAt, CT.CreatedBy, GETDATE(), @UserID, @BrokerID
+		FROM ClientTemp CT
+		INNER JOIN InsuranceTemp IT ON CT.InsuranceId = IT.Id
+		LEFT JOIN Client C ON CT.Code = C.Code
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId IN (
+			SELECT Id
+			FROM Insurance
+		) AND IT.EnableDirectbilling = 1
+		AND C.Code IS NULL
+
+		-- CustomerUser table
+		UPDATE U SET
+			U.Status = (CASE WHEN IT.EnableAccessToMore = 1 AND U.Status <> 'NA' THEN U.Status
+						WHEN IT.EnableAccessToMore = 1 AND U.Status = 'NA' THEN 'UC'
+						ELSE 'NA' END),
+			--U.Status = 'NA',
+			--U.InsuranceId = CASE WHEN IT.EnableAccessToMore = 1 THEN IT.InsuranceId ELSE @GuidEmpty END,
+			U.ModifiedAt = GETDATE(),
+			U.ModifiedBy = @UserID
+		FROM CustomerUser U
+		--INNER JOIN UserBrokerTemp UB ON U.Id = UB.UserBrokerId
+		INNER JOIN InsuranceTemp IT ON U.InsuranceId = IT.InsuranceId
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId IN (
+			SELECT Id
+			FROM Insurance
+		) AND U.Status <> 'UA'
+
+		INSERT INTO CustomerUser(UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+		SELECT 
+			UBT.UserId, 
+			IT.InsuranceId, 
+			UBT.DefaultUser, 
+			CASE WHEN IT.EnableAccessToMore = 1 THEN UBT.Status ELSE 'NA' END, 
+			UBT.CreatedAt, 
+			UBT.CreatedBy, 
+			GETDATE(), 
+			@UserID, 
+			@BrokerID
+		FROM UserBrokerTemp UBT
+		INNER JOIN InsuranceTemp IT ON UBT.InsuranceId = IT.Id
+		LEFT JOIN CustomerUser UB ON UBT.UserId = UB.UserId
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId IN (
+			SELECT Id
+			FROM Insurance
+		)
+		AND UB.UserId IS NULL
+
+		-- ProfileMember table
+		INSERT INTO ProfileMember(ProfileId, UserId)
+		SELECT @ProfileId, UB.UserId
+		FROM CustomerUser UB
+		INNER JOIN InsuranceTemp IT ON UB.InsuranceId = IT.InsuranceId
+		LEFT JOIN ProfileMember PM ON UB.UserId = PM.UserId
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId IN (
+			SELECT Id
+			FROM Insurance
+		) AND IT.EnableAccessToMore = 1
+		AND PM.UserId IS NULL
+	
+
+		/**
+			Insert New Insurance
+		*/
+		-- Client table
+		INSERT INTO Client(Id, Code, ParentCode, GroupCode, IndustryId, BranchLocCode, Name, Email1, CountryCode, CityCode, Phone, IsHeadOffice, IsInsurance, InsuranceId, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+		SELECT NEWID(), Code, ParentCode, GroupCode, IndustryId, CT.BranchLocCode, CT.Name, Email1, CT.CountryCode, CT.CityCode, Phone, IsHeadOffice, IsInsurance, CT.InsuranceId, @StatusClient, CT.CreatedAt, CT.CreatedBy, GETDATE(), @UserID, @BrokerID
+		FROM ClientTemp CT
+		INNER JOIN InsuranceTemp IT ON CT.InsuranceId = IT.Id
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId NOT IN (
+			SELECT Id
+			FROM Insurance
+		) AND IT.EnableDirectbilling = 1
+
+		-- CustomerUser table
+		INSERT INTO CustomerUser(UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+		SELECT UserId, UB.InsuranceId, DefaultUser, UB.Status, UB.CreatedAt, UB.CreatedBy, GETDATE(), @UserID, @BrokerID
+		FROM UserBrokerTemp UB
+		INNER JOIN InsuranceTemp IT ON UB.InsuranceId = IT.Id
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId NOT IN (
+			SELECT Id
+			FROM Insurance
+		) --AND IT.EnableAccessToMore = 1
+
+		-- ProfileMember table
+		INSERT INTO ProfileMember(ProfileId, UserId)
+		SELECT @ProfileId, UserId
+		FROM UserBrokerTemp UB
+		INNER JOIN InsuranceTemp IT ON UB.InsuranceId = IT.Id
+		WHERE IT.Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND IT.InsuranceId NOT IN (
+			SELECT Id
+			FROM Insurance
+		) AND IT.EnableAccessToMore = 1
+
+		-- Insurance table
+		INSERT INTO Insurance(Id, BranchLocCode, InsurerCode, InsurerBranch, Name, Email, Email2, Address, PostCode, CityCode, CountryCode, EnableDirectbilling, EnableAccessToMore, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId) 
+		SELECT Id, BranchLocCode, InsurerCode, InsurerBranch, Name, Email, Email2, Address, PostCode, CityCode, CountryCode, EnableDirectbilling, EnableAccessToMore, @StatusIns, CreatedAt, CreatedBy, GETDATE(), @UserID, @BrokerID
+		FROM InsuranceTemp
+		WHERE Id IN (
+			SELECT Data
+			FROM dbo.fnSplitString(@IDs, ',')
+		) AND InsuranceId NOT IN (
+			SELECT Id
+			FROM Insurance
+		)
+	END
+	ELSE
+	BEGIN
+		/**
+			Reject = Remove temp data
+		*/
+
+		-- AspNetUsers
+		DELETE FROM AspNetUsers
+		WHERE Id IN (
+			SELECT UserId
+			FROM UserBrokerTemp
+			WHERE InsuranceId IN (
+				SELECT Data
+				FROM dbo.fnSplitString(@IDs, ',')
+			)
+		)
+	END
+
+	-- UserBrokerTemp table
+	DELETE FROM UserBrokerTemp
+	WHERE InsuranceId IN (
+		SELECT Data
+		FROM dbo.fnSplitString(@IDs, ',')
+	)
+
+	-- ClientTemp table
+	DELETE FROM ClientTemp
+	WHERE InsuranceId IN (
+		SELECT Data
+		FROM dbo.fnSplitString(@IDs, ',')
+	)
+
+	-- InsuranceTemp table
+	DELETE FROM InsuranceTemp
+	WHERE Id IN (
+		SELECT Data
+		FROM dbo.fnSplitString(@IDs, ',')
+	)
+
+	COMMIT
+	SELECT 'OK' Message
+END TRY
+BEGIN CATCH
+	ROLLBACK
+	SELECT ERROR_MESSAGE() Message
+END CATCH
+--VERSION [V20191216.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Insurance_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_Insurance_GridView]
+	@BrokerId int
+AS
+	declare @brokerTable table (
+		Id uniqueidentifier,
+		BrokerId int,
+		BrokerName nvarchar(100),
+		BranchLocCode nvarchar(10),
+		InsurerCode nvarchar(10),
+		Name nvarchar(60),
+		InsurerBranch nvarchar(10),
+		Email varchar(8000),
+		Email2 varchar(8000),
+		CountryCode nvarchar(20),
+		PostCode nvarchar(10),
+		BranchLocName nvarchar(60),
+		CountryName nvarchar(60),
+		[Address] nvarchar(200),
+		AccountNumber nvarchar(20),
+		BankAddress nvarchar(100),
+		BankName nvarchar(60),
+		BankBranch nvarchar(50),
+		CitizenshipCode nvarchar(50),
+		RelationShipCode nvarchar(50),
+		EnableDirectbilling bit,
+		ResidentStatus bit,
+		EnableAccessToMore bit,
+		RTGS bit,
+		CreatedAt datetime,
+		ModifiedAt datetime,
+		CreatedBy nvarchar(60),
+		ModifiedBy nvarchar(60),
+		CityCode nvarchar(20),
+		Status nvarchar(2)
+	)
+
+	insert into @brokerTable
+	SELECT 
+		Ins.Id, 
+		Br.Id,
+		ISNULL(Br.Name,'') as BrokerName,
+		ISNULL(Ins.BranchLocCode,'') as BranchLocCode, 
+		ISNULL(Ins.InsurerCode,'') as InsurerCode, 
+		ISNULL(Ins.Name,'') as Name, 
+		ISNULL(Ins.InsurerBranch,'') as InsurerBranch, 
+		ISNULL(Ins.Email,'') as Email,
+		ISNULL(Ins.Email2,'') as Email2,
+		ISNULL(Ins.CountryCode,'') as CountryCode,
+		ISNULL(Ins.PostCode,'') as PostCode,
+		ISNULL(B.Name,'') as Name,  
+		ISNULL(Ins.CountryCode,'') as CountryName,
+		ISNULL(Ins.Address,'') as Address,
+		ISNULL(Ins.AccountNumber,'') as AccountNumber,
+		ISNULL(Ins.BankAddress,'') as BankAddress,
+		ISNULL(Ins.BankName,'') as BankName,
+		ISNULL(Ins.BankBranch,'') as BankBranch,
+		ISNULL(Ins.CitizenshipCode,'') as CitizenshipCode,
+		ISNULL(Ins.RelationShipCode,'') as RelationShipCode,
+		ISNULL(Ins.EnableDirectbilling,0) as EnableDirectbilling,
+		ISNULL(Ins.ResidentStatus,0) as ResidentStatus,
+		ISNULL(Ins.EnableAccessToMore,1) as EnableAccessToMore,
+		ISNULL(Ins.RTGS,0) as RTGS,
+		Ins.CreatedAt,
+		Ins.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy,
+		Ins.CityCode,
+		Ins.Status 
+	FROM Insurance Ins WITH(NOLOCK)
+	--LEFT JOIN Country C WITH(NOLOCK) ON C.Code = Ins.CountryCode
+	LEFT JOIN BranchLoc B WITH(NOLOCK) ON B.Code = Ins.BranchLocCode
+	LEFT JOIN AspNetUsers CR WITH(NOLOCK) ON CR.Id = Ins.CreatedBy
+	LEFT JOIN AspNetUsers M WITH(NOLOCK) ON M.Id = Ins.ModifiedBy
+	LEFT JOIN Customer Br ON Ins.BrokerId = Br.Id
+	WHERE Ins.Status = 'A' AND Ins.Id NOT IN (SELECT InsuranceId FROM InsuranceTemp WITH(NOLOCK))
+	UNION ALL
+	SELECT 
+		InsTemp.Id, 
+		Br.Id,
+		ISNULL(Br.Name,'') as BrokerName,
+		ISNULL(InsTemp.BranchLocCode,'') as BranchLocCode, 
+		ISNULL(InsTemp.InsurerCode,'') as InsurerCode, 
+		ISNULL(InsTemp.Name,'') as Name, 
+		ISNULL(InsTemp.InsurerBranch,'') as InsurerBranch, 
+		ISNULL(InsTemp.Email,'') as Email,
+		ISNULL(InsTemp.Email2,'') as Email2,
+		ISNULL(InsTemp.CountryCode,'') as CountryCode,
+		ISNULL(InsTemp.PostCode,'') as PostCode,
+		ISNULL(B.Name,'') as Name,  
+		ISNULL(InsTemp.CountryCode,'') as CountryName,
+		ISNULL(InsTemp.Address,'') as Address,
+		ISNULL(InsTemp.AccountNumber,'') as AccountNumber,
+		ISNULL(InsTemp.BankAddress,'') as BankAddress,
+		ISNULL(InsTemp.BankName,'') as BankName,
+		ISNULL(InsTemp.BankBranch,'') as BankBranch,
+		ISNULL(InsTemp.CitizenshipCode,'') as CitizenshipCode,
+		ISNULL(InsTemp.RelationShipCode,'') as RelationShipCode,
+		ISNULL(InsTemp.EnableDirectbilling,0) as EnableDirectbilling,
+		ISNULL(InsTemp.ResidentStatus,0) as ResidentStatus,
+		ISNULL(InsTemp.EnableAccessToMore,1) as EnableAccessToMore,
+		ISNULL(InsTemp.RTGS,0) as RTGS,
+		InsTemp.CreatedAt,
+		InsTemp.ModifiedAt,
+		CR.UserName as CreatedBy,
+		M.UserName as ModifiedBy,
+		InsTemp.CityCode,
+		InsTemp.Status 
+	FROM InsuranceTemp InsTemp WITH(NOLOCK)
+	--LEFT JOIN Country C ON C.Code = InsTemp.CountryCode
+	LEFT JOIN BranchLoc B WITH(NOLOCK) ON B.Code = InsTemp.BranchLocCode
+	LEFT JOIN AspNetUsers CR WITH(NOLOCK) ON CR.Id = InsTemp.CreatedBy
+	LEFT JOIN AspNetUsers M WITH(NOLOCK) ON M.Id = InsTemp.ModifiedBy
+	LEFT JOIN Customer Br ON InsTemp.BrokerId = Br.Id
+
+	BEGIN
+
+	IF (@BrokerId = 0)
+	
+	BEGIN
+	SELECT * FROM @brokerTable ORDER BY ModifiedAt DESC
+	END
+	
+	ELSE
+	
+	BEGIN
+	SELECT * FROM @brokerTable WHERE BrokerId = @BrokerId ORDER BY ModifiedAt DESC
+	END
+
+	END
+RETURN 0
+-- VERSION [20191220.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Insurance_Insert]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE 
+PROC [dbo].[SP_Insurance_Insert]
+(
+	@TempType VARCHAR(2),
+	@BranchLocCode VARCHAR(3),
+	@InsurerCode VARCHAR(6),
+	@InsurerBranch VARCHAR(10),
+	@Name VARCHAR(60),
+	@Email1 VARCHAR(8000),
+	@Email2 VARCHAR(8000),
+	@Address VARCHAR(200),
+	@PostalCode VARCHAR(10),
+	@CityCode VARCHAR(20),
+	@CountryCode VARCHAR(20),
+	@EnableVA BIT,
+	@EnableAcc BIT,
+	@Status VARCHAR(2),
+	@UserId UNIQUEIDENTIFIER,
+	@UserIns VARCHAR(MAX),
+	@BrokerId INT,
+	@IsSuperUser BIT
+)
+AS
+BEGIN
+	--DECLARE
+	--	@InsId UNIQUEIDENTIFIER = NEWID(),
+	--	@TempType VARCHAR(2) = 'I',
+	--	@BranchLocCode VARCHAR(3) = 'JAK',
+	--	@InsurerCode VARCHAR(6) = 'INS656',
+	--	@InsurerBranch VARCHAR(10) = 'JAK',
+	--	@Name VARCHAR(60) = 'Insurer 656',
+	--	@Email1 VARCHAR(8000) = 'me@sample.com',
+	--	@Email2 VARCHAR(8000),
+	--	@Address VARCHAR(200) = '-',
+	--	@PostalCode VARCHAR(10) = '-',
+	--	@CityCode VARCHAR(20) = '-',
+	--	@CountryCode VARCHAR(20) = '-',
+	--	@EnableVA BIT = 1,
+	--	@EnableAcc BIT = 1,
+	--	@Status VARCHAR(2) = 'WA',
+	--	@UserId UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER),
+	--	@UserIns VARCHAR(MAX) = CONCAT(CONCAT(CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER),';'),CONCAT(NEWID(),';')),
+	--	@BrokerId INT = 1,
+	--	@IsSuperUser BIT = 1
+
+	BEGIN TRY
+		DECLARE @InsId UNIQUEIDENTIFIER = NEWID(), @ClientStatus VARCHAR(2) = 'NA', @UserStatus VARCHAR(2) = 'UC', @GuidEmpty UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER), @ProfileId INT, @ProfileName VARCHAR(60) = 'Policy Number Uploader'
+
+		IF @IsSuperUser = 1
+		BEGIN
+			INSERT INTO Insurance(Id, BranchLocCode, InsurerCode, InsurerBranch, Name, Email, Email2, Address, PostCode, CityCode, CountryCode, EnableDirectbilling, EnableAccessToMore, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+			VALUES(@InsId, @BranchLocCode, @InsurerCode, @InsurerBranch, @Name, @Email1, @Email2, @Address, @PostalCode, @CityCode, @CountryCode, @EnableVA, @EnableAcc, @Status, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+
+			IF @EnableVA = 1
+			BEGIN
+				INSERT INTO Client(Code, ParentCode, GroupCode, IndustryId, BranchLocCode, Name, Email1, Email2, CountryCode, CityCode, Phone, IsHeadOffice, IsInsurance, InsuranceId, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				VALUES(@InsurerCode, '-', '-', 0, @BranchLocCode, @Name, @Email1, @Email2, @CountryCode, @CityCode, '-', 0, 1, @InsId, @ClientStatus, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+			END
+
+			IF @EnableAcc = 1
+			BEGIN
+				INSERT INTO CustomerUser(UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				SELECT Data, @InsId, 0, @UserStatus, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId
+				FROM dbo.fnSplitString(@UserIns,';')
+
+				SELECT TOP 1 @ProfileId = Id FROM Profile WHERE BrokerId = @BrokerId AND Name = @ProfileName
+
+				INSERT INTO ProfileMember(ProfileId, UserId)
+				SELECT @ProfileId, Data
+				FROM dbo.fnSplitString(@UserIns,';')
+			END
+			ELSE
+			BEGIN
+				INSERT INTO CustomerUser(UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				SELECT Data, @InsId, 0, 'NA', GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId
+				FROM dbo.fnSplitString(@UserIns,';')
+			END
+		END
+		ELSE
+		BEGIN
+			INSERT INTO InsuranceTemp(Id, InsuranceId, TempType, BranchLocCode, InsurerCode, InsurerBranch, Name, Email, Email2, Address, PostCode, CityCode, CountryCode, EnableDirectbilling, EnableAccessToMore, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+			VALUES(@InsId, @GuidEmpty, @TempType, @BranchLocCode, @InsurerCode, @InsurerBranch, @Name, @Email1, @Email2, @Address, @PostalCode, @CityCode, @CountryCode, @EnableVA, @EnableAcc, @Status, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+
+			IF @EnableVA = 1
+			BEGIN
+				INSERT INTO ClientTemp(TempType, ClientId, Code, ParentCode, GroupCode, IndustryId, BranchLocCode, Name, Email1, CountryCode, CityCode, Phone, IsHeadOffice, IsInsurance, InsuranceId, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				VALUES(@TempType, NEWID(), @InsurerCode, '-', '-', 0, @BranchLocCode, @Name, @Email1, @CountryCode, @CityCode, '-', 0, 1, @InsId, @ClientStatus, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+			END
+
+			IF @EnableAcc = 1
+			BEGIN
+				INSERT INTO UserBrokerTemp(UserBrokerId, TempType, UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				SELECT @GuidEmpty, @TempType, Data, @InsId, 0, @UserStatus, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId
+				FROM dbo.fnSplitString(@UserIns,';')
+			END
+			ELSE
+			BEGIN
+				INSERT INTO UserBrokerTemp(UserBrokerId, TempType, UserId, InsuranceId, DefaultUser, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+				SELECT @GuidEmpty, @TempType, Data, @InsId, 0, 'NA', GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId
+				FROM dbo.fnSplitString(@UserIns,';')
+			END
+		END
+
+		SELECT 'OK' [Message]
+	END TRY
+	BEGIN CATCH
+		SELECT ERROR_MESSAGE() [Message]
+	END CATCH
+END
+--VERSION [V20191216.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Notification_GetData]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_Notification_GetData]
+	@UserID varchar(50)
+as
+begin
+	with Data_Notif as (
+		select 
+			cast(sum(TotalData) over() as bigint)TotalNotif,
+			cast(sum(TotalData) over(PARTITION BY Type,status) as bigint)TotalData,
+			Type,
+			Status
+		from Notification where UserId=@UserID and NotifStatus=0
+
+	)
+	select distinct 
+			cast(TotalNotif as varchar) +' New Notification' Notification
+		, cast(TotalData as varchar) + ' Data ' +Type  +' ' +case when Status='A' then 'Approved' else 'Rejected' end  Message
+		,Type
+		,Status
+		from Data_Notif 
+
+end
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_SysParameter_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROC [dbo].[SP_SysParameter_GridView]
+AS
+BEGIN
+	select *, 
+	ROW_NUMBER() OVER(Partition by Id ORDER BY ModifiedAt DESC) AS RowPart 
+	into #data
+	from (
+		select 
+			SP.[Id],
+			SP.[Name],
+			SP.[Value],
+			CASE 
+				WHEN SP.[Description] IS NULL THEN ''
+				ELSE SP.[Description]
+			END [Description],
+			SP.[Status],
+			SP.[CreatedAt],
+			ISNULL(ANU2.[UserID], '') CreatedBy,
+			SP.[ModifiedAt],
+			ISNULL(ANU.[UserID], '') ModifiedBy,
+			SP.[Unit],
+			CASE
+				WHEN SPT.Id IS NULL THEN SP.[Status2]
+				ELSE SPT.[Status2]
+			END Status2
+		FROM [dbo].[SystemParameter] SP
+			LEFT JOIN [dbo].[AspNetUsers] ANU ON SP.[ModifiedBy] = ANU.[Id]
+			LEFT JOIN [dbo].[AspNetUsers] ANU2 ON SP.[CreatedBy] = ANU2.[Id]
+			LEFT JOIN [dbo].[SystemParameterTemp] SPT ON SP.[Id] = SPT.[SystemParameterId] AND SPT.[Status2] IN ('WA', 'WD',  'RV')
+		WHERE SP.[Status] = 1
+	) A
+	select * from #data where RowPart=1
+	drop table #data
+END
+-- END CODE HERE --
+-- VERSION [20190612.01]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_SysParameter_GridView_ApprovalList]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROC [dbo].[SP_SysParameter_GridView_ApprovalList]
+	@User nvarchar(50),
+	@DataType nvarchar(50)
+AS
+BEGIN
+	SELECT *, 
+	ROW_NUMBER() OVER(Partition by [Id] ORDER BY [ModifiedAt] DESC) AS RowPart 
+	INTO #data
+	FROM (
+		SELECT
+			SPT.[Id],
+			SPT.[SystemParameterId],
+			SPT.[Name],
+			SP.[Value] OldValue,
+			SPT.[Value] Value,
+			CASE
+				WHEN SPT.[Description] IS NULL THEN ''
+				ELSE SPT.[Description]
+			END [Description],
+			NULL Status,
+			SPT.[CreatedAt],
+			ANU2.[UserID] CreatedBy,
+			SPT.[ModifiedAt],
+			ANU.[UserID] ModifiedBy,
+			CASE
+				WHEN SPT.[TempType] = 'I' THEN 'New'
+				WHEN SPT.[TempType] = 'U' THEN 'Update'
+				WHEN SPT.[TempType] = 'D' THEN 'Delete'
+			END RequestType,
+			SPT.[Status2]
+		FROM [dbo].[SystemParameterTemp] SPT
+			INNER JOIN [dbo].[SystemParameter] SP On SPT.[SystemParameterId] = SP.[Id]
+			LEFT JOIN [dbo].[AspNetUsers] ANU ON SPT.[ModifiedBy] = ANU.[Id]
+			LEFT JOIN [dbo].[AspNetUsers] ANU2 ON SPT.[CreatedBy] = ANU2.[Id]
+	) A
+	
+	IF @DataType = 'My Request'
+	BEGIN
+		SELECT * FROM #data WHERE [CreatedBy] = @User AND [Status2] IN ('WA', 'WD')
+	END
+	ELSE IF @DataType = 'To Be Approved'
+	BEGIN
+		SELECT * FROM #data WHERE [CreatedBy] <> @User AND [Status2] IN ('WA', 'WD')
+	END
+
+	drop table #data
+END
+-- END CODE HERE --
+-- VERSION [20190612.01]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_SystemParameter_Edit]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE  PROC [dbo].[SP_SystemParameter_Edit]
+--declare
+	@Id varchar(50)='8362d3b8-a0a8-4c91-99ce-006fa71a481c'
+as
+begin
+	select *, 
+	ROW_NUMBER() OVER(Partition by Id ORDER BY ModifiedAt DESC) AS RowPart 
+	into #data
+	from (
+		select 
+			SP.[Id]
+			,SP.[Name]
+			,SP.[Value]
+			,SP.[Description]
+			,SP.[Status]
+			,SP.[Unit]
+			,SP.[ModifiedAt]
+			,ANU.[UserName] ModifiedBy
+			,CASE
+				WHEN SPT.Id IS NULL THEN SP.[Status2]
+				ELSE SPT.[Status2]
+			END Status2
+		FROM [dbo].[SystemParameter] SP
+			LEFT JOIN [dbo].[AspNetUsers] ANU ON SP.[ModifiedBy] = ANU.[Id] 
+			LEFT JOIN [dbo].[SystemParameterTemp] SPT ON SP.[Id] = SPT.[SystemParameterId] AND SPT.[Status2] IN ('WA', 'WD',  'RV')
+	)A
+
+	select * from #data where RowPart=1 and Id=@Id
+
+	drop table #data
+end
+-- END CODE HERE --
+-- VERSION [20190612.01]
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_SystemParameter_EditApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE PROC [dbo].[SP_SystemParameter_EditApproval]
+--declare
+	@Id varchar(50)='8362d3b8-a0a8-4c91-99ce-006fa71a481c'
+as
+begin
+	select *, 
+	ROW_NUMBER() OVER(Partition by Id ORDER BY ModifiedAt DESC) AS RowPart 
+	into #data
+	from (
+		select
+			SPT.[Id],
+			SPT.[SystemParameterId],
+			SPT.[Name],
+			SP.[Value] OldValue,
+			SPT.[Value] Value,
+			SP.Unit,
+			CASE
+				WHEN SPT.[Description] IS NULL THEN ''
+				ELSE SPT.[Description]
+			END [Description],
+			NULL Status,
+			SPT.[CreatedAt],
+			ANU2.[UserID] CreatedBy,
+			SPT.[ModifiedAt],
+			ANU.[UserID] ModifiedBy,
+			SPT.[Status2],
+			SPT.[ApprovalComment]
+		FROM [dbo].[SystemParameterTemp] SPT
+			INNER JOIN [dbo].[SystemParameter] SP On SPT.SystemParameterId = SP.Id
+			LEFT JOIN [dbo].[AspNetUsers] ANU ON SPT.[ModifiedBy] = ANU.Id
+			LEFT JOIN [dbo].[AspNetUsers] ANU2 ON SPT.[CreatedBy] = ANU2.Id
+	)A
+
+	select * from #data where Id = @Id
+
+	drop table #data
+end
+-- END CODE HERE --
+-- VERSION [20190612.01]
+GO
+/****** Object:  StoredProcedure [dbo].[SP_TasksGridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+CREATE PROC [dbo].[SP_TasksGridView]
+	@UID uniqueidentifier
+	
+as
+
+begin
+	BEGIN
+		select * from (
+		
+			--Group Access
+			select 
+				81 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 81) [Module],
+				CAST((SELECT COUNT(1) FROM ProfileTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+				'UserRoles' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				81,
+				(SELECT [Name] FROM Menu WHERE Id = 81),
+				CAST((SELECT COUNT(1) FROM ProfileTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'UserRoles',
+				'My Revision',
+				'RV',
+				2 Seq union
+			select 
+				81,
+				(SELECT [Name] FROM Menu WHERE Id = 81),
+				CAST((SELECT COUNT(1) FROM ProfileTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'UserRoles',
+				'My Request',
+				'WA',
+				3 Seq union
+			select 
+				81,
+				(SELECT [Name] FROM Menu WHERE Id = 81),
+				CAST((SELECT COUNT(1) FROM ProfileTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'UserRoles',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+			--BizTemplate
+			select 
+				87 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 87) [Module],
+				CAST((SELECT COUNT(1) FROM IndustryTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+				'BizTemplate' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				87,
+				(SELECT [Name] FROM Menu WHERE Id = 87),
+				CAST((SELECT COUNT(1) FROM IndustryTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'BizTemplate',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				87,
+				(SELECT [Name] FROM Menu WHERE Id = 87),
+				CAST((SELECT COUNT(1) FROM IndustryTemp WHERE CreatedBy = @UID and Status in ('WA','WD')) AS BIGINT),
+				'BizTemplate',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				87,
+				(SELECT [Name] FROM Menu WHERE Id = 87),
+				CAST((SELECT COUNT(1) FROM IndustryTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'BizTemplate',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+			--CustomerEmailTemplate
+			select 
+				86,
+				(SELECT [Name] FROM Menu WHERE Id = 86) [Module],
+				CAST((SELECT COUNT(1) FROM CustomerEmailTemplateTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+				'CustomerEmailTemplateMaintenance' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				86,
+				(SELECT [Name] FROM Menu WHERE Id = 86),
+				CAST((SELECT COUNT(1) FROM CustomerEmailTemplateTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'CustomerEmailTemplateMaintenance',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				86,
+				(SELECT [Name] FROM Menu WHERE Id = 86),
+				CAST((SELECT COUNT(1) FROM CustomerEmailTemplateTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'CustomerEmailTemplateMaintenance',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				86,
+				(SELECT [Name] FROM Menu WHERE Id = 86),
+				CAST((SELECT COUNT(1) FROM CustomerEmailTemplateTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'CustomerEmailTemplateMaintenance',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+			--SystemParameter
+			--select 
+			--	(SELECT [Name] FROM Menu WHERE Id = 83) [Module],
+			--	CAST((SELECT COUNT(1) FROM SystemParameterTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+			--	'SystemParameter' [Controller],
+			--	'My Draft' [DataType],
+			--	'DR' [dtInitial],
+			--	1 Seq union
+			--select 
+			--	(SELECT [Name] FROM Menu WHERE Id = 83),
+			--	CAST((SELECT COUNT(1) FROM SystemParameterTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+			--	'SystemParameter',
+			--	'My Revision',
+			--	'RV',
+			--	2 union
+			select 
+				83 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 83),
+				CAST((SELECT COUNT(1) FROM SystemParameterTemp WHERE CreatedBy = @UID and Status2 = 'WA') AS BIGINT),
+				'SystemParameter',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				83,
+				(SELECT [Name] FROM Menu WHERE Id = 83),
+				CAST((SELECT COUNT(1) FROM SystemParameterTemp WHERE CreatedBy != @UID and Status2 = 'WA') AS BIGINT),
+				'SystemParameter',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+				--UserAccess
+			select 
+				82 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 82) [Module],
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp CUT INNER JOIN AspNetUserRoles UR ON CUT.UserId = UR.UserId INNER JOIN AspNetRoles R ON UR.RoleId = R.Id WHERE R.[Name] = 'Banker' AND CUT.CreatedBy = @UID and CUT.TempStatus = 'DR') AS BIGINT) [Data],
+				'UserAccess' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				82,
+				(SELECT [Name] FROM Menu WHERE Id = 82),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp CUT INNER JOIN AspNetUserRoles UR ON CUT.UserId = UR.UserId INNER JOIN AspNetRoles R ON UR.RoleId = R.Id WHERE R.[Name] = 'Banker' AND CUT.CreatedBy = @UID and CUT.TempStatus = 'RV') AS BIGINT),
+				'UserAccess',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				82,
+				(SELECT [Name] FROM Menu WHERE Id = 82),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp CUT INNER JOIN AspNetUserRoles UR ON CUT.UserId = UR.UserId INNER JOIN AspNetRoles R ON UR.RoleId = R.Id WHERE R.[Name] = 'Banker' AND CreatedBy = @UID and TempStatus in ('WA','WD')) AS BIGINT),
+				'UserAccess',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				82,
+				(SELECT [Name] FROM Menu WHERE Id = 82),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp CUT INNER JOIN AspNetUserRoles UR ON CUT.UserId = UR.UserId INNER JOIN AspNetRoles R ON UR.RoleId = R.Id WHERE R.[Name] = 'Banker' AND CreatedBy != @UID and TempStatus in ('WA', 'WD')) AS BIGINT),
+				'UserAccess',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+			--CustomerUserAccess
+			select 
+				85 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 85) [Module],
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp WHERE CreatedBy = @UID and Status = 'DR' AND BrokerId<>0) AS BIGINT) [Data],
+				'CustomerUserAccess' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				85,
+				(SELECT [Name] FROM Menu WHERE Id = 85),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp WHERE CreatedBy = @UID and Status = 'RV' AND BrokerId<>0) AS BIGINT),
+				'CustomerUserAccess',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				85,
+				(SELECT [Name] FROM Menu WHERE Id = 85),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp WHERE CreatedBy = @UID and Status in ('WA','WD') AND BrokerId<>0) AS BIGINT),
+				'CustomerUserAccess',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				85,
+				(SELECT [Name] FROM Menu WHERE Id = 85),
+				CAST((SELECT COUNT(1) FROM CustomerUserTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD') AND BrokerId<>0) AS BIGINT),
+				'CustomerUserAccess',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+					--AP Counterpart
+			select 
+				26 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 26) [Module],
+				CAST((SELECT COUNT(1) FROM APCounterpartTemp WHERE CreatedBy = @UID and Status = 'SD') AS BIGINT) [Data],
+				'APCounterpartDataManagement' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				26,
+				(SELECT [Name] FROM Menu WHERE Id = 26),
+				CAST((SELECT COUNT(1) FROM APCounterpartTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'APCounterpartDataManagement',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				26,
+				(SELECT [Name] FROM Menu WHERE Id = 26),
+				CAST((SELECT COUNT(1) FROM APCounterpartTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'APCounterpartDataManagement',
+				'My Request',
+				'WA',
+
+				3 union
+			select 
+				26,
+				(SELECT [Name] FROM Menu WHERE Id = 26),
+				CAST((SELECT COUNT(1) FROM APCounterpartTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'APCounterpartDataManagement',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+
+					--AR Counterpart
+			select 
+				25 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 25) [Module],
+				CAST((SELECT COUNT(1) FROM ARCounterpartTemp WHERE CreatedBy = @UID and Status = 'SD') AS BIGINT) [Data],
+				'ARCounterPartDM' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				25,
+				(SELECT [Name] FROM Menu WHERE Id = 25),
+				CAST((SELECT COUNT(1) FROM ARCounterpartTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'ARCounterPartDM',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				25,
+				(SELECT [Name] FROM Menu WHERE Id = 25),
+				CAST((SELECT COUNT(1) FROM ARCounterpartTemp WHERE CreatedBy = @UID and Status in ('WA','WD')) AS BIGINT),
+				'ARCounterPartDM',
+				'My Request',
+				'WA',
+
+				3 union
+			select 
+				25,
+				(SELECT [Name] FROM Menu WHERE Id = 25),
+				CAST((SELECT COUNT(1) FROM ARCounterpartTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'ARCounterPartDM',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+							--General Conversion Rate
+			select 
+				22 MenuID,
+				'General & Specific Conversion Rate',--(SELECT [Name] FROM Menu WHERE Id = 22) [Module],
+				CAST(((SELECT COUNT(1) FROM ExchangeRateTemp WHERE CreatedBy = @UID and Status = 'SD') + (SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status = 'SD')) AS BIGINT) [Data],
+				'GeneralConversionRateDataManagement' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				22,
+				'General & Specific Conversion Rate',--(SELECT [Name] FROM Menu WHERE Id = 22),
+				CAST(((SELECT COUNT(1) FROM ExchangeRateTemp WHERE CreatedBy = @UID and Status = 'RV')+(SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status = 'RV')) AS BIGINT),
+				'GeneralConversionRateDataManagement',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				22,
+				'General & Specific Conversion Rate',--(SELECT [Name] FROM Menu WHERE Id = 22),
+				CAST(((SELECT COUNT(1) FROM ExchangeRateTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD'))+(SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD'))) AS BIGINT),
+				'GeneralConversionRateDataManagement',
+				'My Request',
+				'WA',
+
+				3 union
+			select 
+				22,
+				'General & Specific Conversion Rate',--(SELECT [Name] FROM Menu WHERE Id = 22),
+				CAST(((SELECT COUNT(1) FROM ExchangeRateTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD'))+(SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD'))) AS BIGINT),
+				'GeneralConversionRateDataManagement',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+						--Client Conversion Rate
+			--select 
+			--24 MenuID,
+			--	(SELECT [Name] FROM Menu WHERE Id = 24) [Module],
+			--	CAST((SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status = 'SD') AS BIGINT) [Data],
+			--	'GeneralConversionRateDataManagement' [Controller],
+			--	'My Draft' [DataType],
+			--	'DR' [dtInitial],
+			--	1 Seq union
+			--select 
+			--24,
+			--	(SELECT [Name] FROM Menu WHERE Id = 24),
+			--	CAST((SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+			--	'GeneralConversionRateDataManagement',
+			--	'My Revision',
+			--	'RV',
+			--	2 union
+			--select 
+			--24,
+			--	(SELECT [Name] FROM Menu WHERE Id = 24),
+			--	CAST((SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy = @UID and Status in ('WA', 'A', 'R', 'WD', 'D')) AS BIGINT),
+			--	'GeneralConversionRateDataManagement',
+			--	'My Request',
+			--	'WA',
+
+			--	3 union
+			--select 
+			--24,
+			--	(SELECT [Name] FROM Menu WHERE Id = 24),
+			--	CAST((SELECT COUNT(1) FROM SpecificConversionRateTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+			--	'GeneralConversionRateDataManagement',
+			--	'To Be Approved',
+			--	'WA',
+			--	4 Seq union
+
+			--EmailTemplate
+			select 
+				84 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 84) [Module],
+				CAST((SELECT COUNT(1) FROM EmailTemplateTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+				'EmailTemplate' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				84,
+				(SELECT [Name] FROM Menu WHERE Id = 84),
+				CAST((SELECT COUNT(1) FROM EmailTemplateTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'EmailTemplate',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				84,
+				(SELECT [Name] FROM Menu WHERE Id = 84),
+				CAST((SELECT COUNT(1) FROM EmailTemplateTemp WHERE CreatedBy = @UID and Status in ('WA','WD')) AS BIGINT),
+				'EmailTemplate',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				84,
+				(SELECT [Name] FROM Menu WHERE Id = 84),
+				CAST((SELECT COUNT(1) FROM EmailTemplateTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'EmailTemplate',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+				--Customer
+			select 
+				27 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 27) [Module],
+				CAST((SELECT COUNT(1) FROM CustomerTemp WHERE CreatedBy = @UID and Status = 'DR') AS BIGINT) [Data],
+				'Customer' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				27,
+				(SELECT [Name] FROM Menu WHERE Id = 27),
+				CAST((SELECT COUNT(1) FROM CustomerTemp WHERE CreatedBy = @UID and Status = 'RV') AS BIGINT),
+				'Customer',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				27,
+				(SELECT [Name] FROM Menu WHERE Id = 27),
+				CAST((SELECT COUNT(1) FROM CustomerTemp WHERE CreatedBy = @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'Customer',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				27,
+				(SELECT [Name] FROM Menu WHERE Id = 27),
+				CAST((SELECT COUNT(1) FROM CustomerTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD')) AS BIGINT),
+				'Customer',
+				'To Be Approved',
+				'WA',
+				4 Seq union
+
+				
+			--Virtual Account
+			select 
+				21,
+				(SELECT [Name] FROM Menu WHERE Id = 21) [Module],
+				CAST((SELECT COUNT(1) FROM VirtualAccountTemp WHERE CreatedBy = @UID and [Status] = 'DR') AS BIGINT) [Data],
+				'VirtualAccountDataManagement' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				21,
+				(SELECT [Name] FROM Menu WHERE Id = 21),
+				CAST((SELECT COUNT(1) FROM VirtualAccountTemp WHERE CreatedBy = @UID and [Status] = 'RV') AS BIGINT),
+				'VirtualAccountDataManagement',
+				'My Revision',
+				'RV',
+				2 union
+			select 
+				21,
+				(SELECT [Name] FROM Menu WHERE Id = 21),
+				CAST((SELECT COUNT(1) FROM VirtualAccountTemp WHERE CreatedBy = @UID and [Status] in ('WA','WD')) AS BIGINT),
+				'VirtualAccountDataManagement',
+				'My Request',
+				'WA',
+				3 union
+			select 
+				21,
+				(SELECT [Name] FROM Menu WHERE Id = 21),
+				CAST((SELECT COUNT(1) FROM VirtualAccountTemp WHERE CreatedBy != @UID and [Status] in ('WA', 'WD')) AS BIGINT),
+				'VirtualAccountDataManagement',
+				'To Be Approved',
+				'WA',
+				4 Seq
+
+				union
+			
+
+			--ToleranceDataManagement
+			select 
+				23,
+				(SELECT [Name] FROM Menu WHERE Id = 23) [Module],
+				CAST((SELECT COUNT(1) FROM ToleranceTemp WHERE CreatedBy = @UID and [Status] = 'DR') AS BIGINT) [Data],
+				'ToleranceDataManagement' [Controller],
+				'My Draft;Tolerance' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				23,
+				(SELECT [Name] FROM Menu WHERE Id = 23),
+				CAST((SELECT COUNT(1) FROM ToleranceTemp WHERE CreatedBy = @UID and [Status] = 'RV') AS BIGINT),
+				'ToleranceDataManagement',
+				'My Revision;Tolerance',
+				'RV',
+				2 union
+			select 
+				23,
+				(SELECT [Name] FROM Menu WHERE Id = 23),
+				CAST((SELECT COUNT(1) FROM ToleranceTemp WHERE CreatedBy = @UID and [Status] in ('WA', 'WD')) AS BIGINT),
+				'ToleranceDataManagement',
+				'My Request;Tolerance',
+				'WA',
+				3 union
+			select 
+				23,
+				(SELECT [Name] FROM Menu WHERE Id = 23),
+				CAST((SELECT COUNT(1) FROM ToleranceTemp WHERE CreatedBy != @UID and [Status] in ('WA', 'WD')) AS BIGINT),
+				'ToleranceDataManagement',
+				'To Be Approved;Tolerance',
+				'WA',
+				4 Seq
+				union
+				
+			--Tolerance CLient
+			select 
+				23,
+				'Tolerance Client' [Module],
+				CAST((SELECT COUNT(1) FROM ToleranceClientTemp WHERE CreatedBy = @UID and [Status] = 'DR') AS BIGINT) [Data],
+				'ToleranceDataManagement' [Controller],
+				'My Draft;ToleranceClient' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				23,
+				'Tolerance Client',
+				CAST((SELECT COUNT(1) FROM ToleranceClientTemp WHERE CreatedBy = @UID and [Status] = 'RV') AS BIGINT),
+				'ToleranceDataManagement',
+				'My Revision;ToleranceClient',
+				'RV',
+				2 union
+			select 
+				23,
+				'Tolerance Client',
+				CAST((SELECT COUNT(1) FROM ToleranceClientTemp WHERE CreatedBy = @UID and [Status] in ('WA', 'WD')) AS BIGINT),
+				'ToleranceDataManagement',
+				'My Request;ToleranceClient',
+				'WA',
+				3 union
+			select 
+				23,
+				'Tolerance Client',
+				CAST((SELECT COUNT(1) FROM ToleranceClientTemp WHERE CreatedBy != @UID and [Status] in ('WA', 'WD')) AS BIGINT),
+				'ToleranceDataManagement',
+				'To Be Approved;ToleranceClient',
+				'WA',
+				4 Seq
+				
+
+			--APAR Outstanding UFC
+			union
+			select 
+				601 MenuID,
+				(SELECT [Name] FROM Menu WHERE Id = 601) [Module],
+				CAST((SELECT COUNT(1)/2 FROM OutUploadFileConfigTemp WHERE CreatedBy = @UID and Status = 'DR' and BrokerID = (select BrokerId from CustomerUser where UserId = @UID)) AS BIGINT) [Data],
+				'OutUFC' [Controller],
+				'My Draft' [DataType],
+				'DR' [dtInitial],
+				1 Seq union
+			select 
+				601,
+				(SELECT [Name] FROM Menu WHERE Id = 601),
+				CAST((SELECT COUNT(1)/2 FROM OutUploadFileConfigTemp WHERE CreatedBy = @UID and Status = 'RV' and BrokerID = (select BrokerId from CustomerUser where UserId = @UID)) AS BIGINT),
+				'OutUFC',
+				'My Revision',
+				'RV',
+				2 Seq union
+			select 
+				601,
+				(SELECT [Name] FROM Menu WHERE Id = 601),
+				CAST((SELECT COUNT(1)/2 FROM OutUploadFileConfigTemp WHERE CreatedBy = @UID and Status in ('WA') and BrokerID = (select BrokerId from CustomerUser where UserId = @UID)) AS BIGINT),
+				'OutUFC',
+				'My Request',
+				'WA',
+				3 Seq union
+			select 
+				601,
+				(SELECT [Name] FROM Menu WHERE Id = 601),
+				CAST((SELECT COUNT(1)/2 FROM OutUploadFileConfigTemp WHERE CreatedBy != @UID and Status in ('WA', 'WD') and BrokerID = (select BrokerId from CustomerUser where UserId = @UID)) AS BIGINT),
+				'OutUFC',
+				'To Be Approved',
+				'WA',
+				4 Seq
+			
+		)a 
+		where Data > 0 --uncomment on deploy
+		order by Module asc, Seq asc
+	END
+end
+-- END CODE HERE --
+-- VERSION [20200130.01]
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_Tolerance_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_Tolerance_GridView]
+	@BrokerId int
+AS
+	IF @BrokerId = 0
+
+	BEGIN
+	
+	SELECT Tol.BrokerId, B.Name as BrokerName, Tol.Id, ISNULL(Tol.CurrencyCode,'') as CurrencyCode, ISNULL(Cur.Name,'') as Name, Tol.Status, ISNULL(Tol.Value,'') Value, Tol.DefaultValue, Tol.CreatedAt, Tol.ModifiedAt, Crea.UserName as CreatedBy, Modi.UserName as ModifiedBy FROM Tolerance Tol WITH(NOLOCK)
+	LEFT JOIN Currency Cur ON Cur.Code = Tol.CurrencyCode
+	LEFT JOIN AspNetUsers Crea ON Crea.Id = Tol.CreatedBy
+	LEFT JOIN AspNetUsers Modi ON Modi.Id = Tol.ModifiedBy
+	LEFT JOIN Customer B ON B.Id = Tol.BrokerId
+	WHERE Tol.Status = 'A' AND Tol.Id NOT IN (SELECT ToleranceId FROM ToleranceTemp WITH(NOLOCK))
+	UNION ALL
+	SELECT Tol.BrokerId, B.Name as BrokerName, Tol.Id, ISNULL(Tol.CurrencyCode,'') as CurrencyCode, ISNULL(Cur.Name,'') as Name, Tol.Status, ISNULL(Tol.Value,'') Value, Tol.DefaultValue, Tol.CreatedAt, Tol.ModifiedAt, Crea.UserName as CreatedBy, Modi.UserName as ModifiedBy FROM ToleranceTemp Tol WITH(NOLOCK)
+	LEFT JOIN Currency Cur ON Cur.Code = Tol.CurrencyCode
+	LEFT JOIN AspNetUsers Crea ON Crea.Id = Tol.CreatedBy
+	LEFT JOIN AspNetUsers Modi ON Modi.Id = Tol.ModifiedBy
+	LEFT JOIN Customer B ON B.Id = Tol.BrokerId
+
+	END
+
+	ELSE
+
+	BEGIN
+
+	SELECT Tol.BrokerId, B.Name as BrokerName, Tol.Id, ISNULL(Tol.CurrencyCode,'') as CurrencyCode, ISNULL(Cur.Name,'') as Name, Tol.Status, ISNULL(Tol.Value,'') Value, Tol.DefaultValue, Tol.CreatedAt, Tol.ModifiedAt, Crea.UserName as CreatedBy, Modi.UserName as ModifiedBy FROM Tolerance Tol WITH(NOLOCK)
+	LEFT JOIN Currency Cur ON Cur.Code = Tol.CurrencyCode
+	LEFT JOIN AspNetUsers Crea ON Crea.Id = Tol.CreatedBy
+	LEFT JOIN AspNetUsers Modi ON Modi.Id = Tol.ModifiedBy
+	LEFT JOIN Customer B ON B.Id = Tol.BrokerId
+	WHERE Tol.Status = 'A' AND Tol.Id NOT IN (SELECT ToleranceId FROM ToleranceTemp WITH(NOLOCK)) AND Tol.BrokerId = @BrokerId
+	UNION ALL
+	SELECT Tol.BrokerId, B.Name as BrokerName, Tol.Id, ISNULL(Tol.CurrencyCode,'') as CurrencyCode, ISNULL(Cur.Name,'') as Name, Tol.Status, ISNULL(Tol.Value,'') Value, Tol.DefaultValue, Tol.CreatedAt, Tol.ModifiedAt, Crea.UserName as CreatedBy, Modi.UserName as ModifiedBy FROM ToleranceTemp Tol WITH(NOLOCK)
+	LEFT JOIN Currency Cur ON Cur.Code = Tol.CurrencyCode
+	LEFT JOIN AspNetUsers Crea ON Crea.Id = Tol.CreatedBy
+	LEFT JOIN AspNetUsers Modi ON Modi.Id = Tol.ModifiedBy
+	LEFT JOIN Customer B ON B.Id = Tol.BrokerId
+	WHERE Tol.BrokerId = @BrokerId
+
+	END
+RETURN 0
+-- VERSION [20191220.01]
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_UserAccess_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_UserAccess_GridView]
+	@BrokerId int
+AS
+BEGIN
+	SELECT
+		CU.[Id] ID,
+		ISNULL(B.[Id], 0) BrokerId,
+		ISNULL(B.[Name], 'Bank') BrokerName,
+		U.[UserID],
+		CU.[FirstName] UserName,
+		U.[Email],
+		UR.[RoleId] GroupAccessCategoryId,
+		R.[Name] GroupAccessCategoryName,
+		P.[UserCategory] ,
+		ISNULL(P.[Id], 0) ProfileID,
+		ISNULL(P.[Name], '') ProfileName,
+		CU.[Status],
+		CR.[UserName] CreatedBy,
+		CU.[CreatedAt],
+		M.[UserName] ModifiedBy,
+		CU.[ModifiedAt],
+		CONVERT(uniqueidentifier, U.[Id]) AspID,
+		U.[PhoneNumber],
+		1 [Type],
+		CUT.[TempStatus]
+	INTO #data
+	FROM [CustomerUser] CU
+	LEFT JOIN [CustomerUserTemp] CUT ON CU.[Id] = CUT.[UserBrokerId] AND CUT.[TempStatus] IN ('WA', 'WD', 'RV', 'DR')
+	LEFT JOIN [Customer] B ON CU.[BrokerId] = B.[Id]
+	LEFT JOIN [AspNetUsers] U ON CU.[UserId] = U.[Id]
+	INNER JOIN [AspNetUserRoles] UR ON U.[Id] = UR.[UserId]
+	INNER JOIN [AspNetRoles] R ON UR.[RoleId] = R.[Id]
+	LEFT JOIN [ProfileMember] PM ON U.[Id] = PM.[UserId]
+	LEFT JOIN [Profile] P ON PM.[ProfileId] = P.[Id]
+	LEFT JOIN [AspNetUsers] CR ON CU.[CreatedBy] = CR.[Id]
+	LEFT JOIN [AspNetUsers] M ON CU.[ModifiedBy] = M.[Id]
+	WHERE CU.[Status] IN ('A', 'L')
+
+	IF @BrokerId = 0
+	BEGIN
+		SELECT * FROM #data
+	END
+	ELSE
+	BEGIN
+		SELECT * FROM #data WHERE BrokerId = @BrokerId
+	END
+
+	DROP TABLE #data
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_UserAccess_GridView_Approval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROCEDURE [dbo].[SP_UserAccess_GridView_Approval]
+	@User nvarchar(50),
+	@DataType nvarchar(50),
+	@BrokerId int
+AS
+BEGIN
+	SELECT
+		CUT.[Id] ID,
+		ISNULL(B.[Id], 0) BrokerId,
+		ISNULL(B.[Name], 'Bank') BrokerName,
+		U.[UserID],
+		CUT.[FirstName] UserName,
+		U.[Email],
+		UR.[RoleId] GroupAccessCategoryId,
+		R.[Name] GroupAccessCategoryName,
+		P.[UserCategory] ,
+		ISNULL(P.[Id], 0) ProfileID,
+		ISNULL(P.[Name], '') ProfileName,
+		CUT.[Status],
+		CASE
+			WHEN CUT.[TempType] = 'I' AND CUT.[TempStatus] = 'WA' THEN 'New'
+			WHEN CUT.[TempType] = 'U' AND CUT.[TempStatus] = 'WA' THEN 'Update'
+			WHEN CUT.[TempType] = 'D' AND CUT.[TempStatus] = 'WD' THEN 'Delete'
+		END RequestType,
+		CR.[UserName] CreatedBy,
+		CUT.[CreatedAt],
+		M.[UserName] ModifiedBy,
+		CUT.[ModifiedAt],
+		CONVERT(uniqueidentifier, U.[Id]) AspID,
+		U.[PhoneNumber],
+		2 [Type],
+		CUT.[TempStatus]
+	INTO #data
+	FROM [CustomerUserTemp] CUT
+	LEFT JOIN [CustomerUser] CU ON CUT.[UserBrokerId] = CU.[Id]
+	LEFT JOIN [Customer] B ON CUT.[BrokerId] = B.[Id]
+	LEFT JOIN [AspNetUsers] U ON CUT.[UserId] = U.[Id]
+	INNER JOIN [AspNetUserRoles] UR ON U.[Id] = UR.[UserId]
+	INNER JOIN [AspNetRoles] R ON UR.[RoleId] = R.[Id]
+	LEFT JOIN [ProfileMemberTemp] PMT ON CUT.[Id] = PMT.[CustomerUserTempId]
+	LEFT JOIN [Profile] P ON PMT.[ProfileId] = P.[Id]
+	LEFT JOIN [AspNetUsers] CR ON CUT.[CreatedBy] = CR.[Id]
+	LEFT JOIN [AspNetUsers] M ON CUT.[ModifiedBy] = M.[Id]
+
+	IF @DataType = 'My Draft'
+	BEGIN
+		SELECT * FROM #data
+		WHERE [BrokerId] = @BrokerId AND [CreatedBy] = @User AND [TempStatus] = 'DR'
+		ORDER BY [ModifiedAt] DESC
+	END
+	ELSE IF @DataType = 'My Revision'
+	BEGIN
+		SELECT * FROM #data
+		WHERE [BrokerId] = @BrokerId AND [CreatedBy] = @User AND [TempStatus] = 'RV'
+		ORDER BY ModifiedAt DESC
+	END
+	ELSE IF @DataType = 'My Request'
+	BEGIN
+		SELECT * FROM #data
+		WHERE [BrokerId] = @BrokerId AND [CreatedBy] = @User AND [TempStatus] IN ('WA', 'WD')
+		ORDER BY [ModifiedAt] DESC
+	END
+	ELSE IF @DataType = 'To Be Approved'
+	BEGIN
+		SELECT * FROM #data
+		WHERE [BrokerId] = @BrokerId AND [CreatedBy] != @User AND [TempStatus] IN ( 'WA', 'WD')
+		ORDER BY ModifiedAt DESC
+	END
+
+	DROP TABLE #data
+END
+GO
+/****** Object:  StoredProcedure [dbo].[SP_VirtualAccount_ApproveAll]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE 
+PROC [dbo].[SP_VirtualAccount_ApproveAll]
+	@IDs VARCHAR(MAX),
+	@Type INT,
+	@StatusVA varchar(2),
+	@StatusClientVA varchar(2),
+	@UserID UNIQUEIDENTIFIER,
+	@BrokerID INT
+AS
+BEGIN TRAN
+BEGIN TRY
+	DECLARE @DataCounter INT
+	SELECT @DataCounter = COUNT(Id) 
+	FROM VirtualAccountTemp 
+	WHERE VirtualAccountId IN (
+		SELECT Data 
+		FROM dbo.fnSplitString(@IDs,',')
+	)
+
+	/**
+		Approve = Insert to/Update main data
+	*/
+	IF @Type = 1
+	BEGIN
+		/**
+			Update Existing Virtual Account
+		*/
+		-- VirtualAccount table
+		UPDATE VA SET
+			VA.CurrencyCode = VAT.CurrencyCode,
+			VA.Bin = VAT.Bin,
+			VA.Code = VAT.Code,
+			VA.ClientNumber = VAT.ClientNumber,
+			VA.Balanced = VAT.Balanced,
+			VA.ModifiedAt = GETDATE(),
+			VA.ModifiedBy = @UserID
+		FROM VirtualAccount VA
+		INNER JOIN VirtualAccountTemp VAT ON VA.Id = VAT.VirtualAccountId
+		WHERE VA.Id IN (
+			SELECT Data 
+			FROM dbo.fnSplitString(@IDs,',')
+		)
+		
+		-- ClientVA table
+		UPDATE CVA SET
+			CVA.ClientId = CVAT.ClientId,
+			CVA.VirtualNumberId = CVAT.VirtualNumberId
+		FROM ClientVA CVA
+		INNER JOIN ClientVATemp CVAT ON CVA.Id = CVAT.ClientVAId
+		WHERE CVA.VirtualNumberId IN (
+			SELECT Data 
+			FROM dbo.fnSplitString(@IDs,',')
+		) AND CVA.VirtualNumberId IN (
+			SELECT Id
+			FROM VirtualAccount
+		)
+
+
+		/**
+			Insert New Virtual Account
+		*/
+		-- ClientVA table
+		INSERT INTO ClientVA (ClientId, VirtualNumberId, Status)
+		SELECT ClientId, VirtualNumberId, @StatusClientVA
+		FROM ClientVATemp CVAT
+		INNER JOIN VirtualAccountTemp VAT ON CVAT.VirtualNumberId = VAT.VirtualAccountId
+		WHERE VirtualAccountId IN (
+			SELECT Data 
+			FROM dbo.fnSplitString(@IDs,',')
+		) AND VirtualAccountId NOT IN (
+			SELECT Id
+			FROM VirtualAccount
+		)
+
+		-- VirtualAccount table
+		INSERT INTO VirtualAccount (Id, CurrencyCode, Bin, Code, ClientNumber, Balanced, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+		SELECT VirtualAccountId, CurrencyCode, Bin, Code, ClientNumber, 0, @StatusVA, CreatedAt, CreatedBy, GETDATE(), @UserID, @BrokerID
+		FROM VirtualAccountTemp
+		WHERE VirtualAccountId IN (
+			SELECT Data 
+			FROM dbo.fnSplitString(@IDs,',')
+		) AND VirtualAccountId NOT IN (
+			SELECT Id
+			FROM VirtualAccount
+		)
+	END
+
+	/**
+		Reject = Remove temp data
+	*/
+	ELSE
+	BEGIN
+		-- ClientTemp table
+		DELETE CT 
+		FROM ClientTemp CT
+		INNER JOIN ClientVATemp CVAT ON CT.ClientId = CVAT.ClientId
+		WHERE VirtualNumberId IN (
+			SELECT Data 
+			FROM dbo.fnSplitString(@IDs,',')
+		)
+	END
+
+	-- ClientVATemp table
+	DELETE FROM ClientVATemp 
+	WHERE VirtualNumberId IN (
+		SELECT Data 
+		FROM dbo.fnSplitString(@IDs,',')
+	)
+
+	-- VirtualAccountTemp table
+	DELETE FROM VirtualAccountTemp 
+	WHERE VirtualAccountId IN (
+		SELECT Data 
+		FROM dbo.fnSplitString(@IDs,',')
+	)
+
+	COMMIT
+	SELECT 'OK' Message
+END TRY
+BEGIN CATCH
+	ROLLBACK
+	SELECT ERROR_MESSAGE() Message
+END CATCH
+--VERSION [V20191216.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_VirtualAccount_GetClientVA]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE PROC [dbo].[SP_VirtualAccount_GetClientVA]
+(
+	@VirtualNumberId UNIQUEIDENTIFIER
+)
+AS
+BEGIN
+	SELECT * INTO #ClientVATemp
+	FROM (
+		SELECT 
+			CVA.Id
+		   ,CVA.ClientId
+		   ,ISNULL(ISNULL(C.Code, CT.Code), VA.ClientNumber) ClientNumber
+		   ,C.[Name] ClientName
+		   ,CVA.[Status] 
+		   ,CASE WHEN CVA.[Status] = N'A'
+				THEN 'Active'
+				ELSE 'Inactive'
+			END StatusDesc
+		   ,VA.ModifiedAt CreatedAt
+		   ,ANU.UserName CreatedBy
+		FROM [dbo].ClientVA CVA
+		LEFT JOIN [dbo].Client C ON CVA.ClientId = C.Id
+		LEFT JOIN [dbo].[ClientTemp] CT ON CVA.ClientId = CT.ClientId
+		INNER JOIN [dbo].VirtualAccount VA ON CVA.VirtualNumberId = VA.Id
+		LEFT JOIN [dbo].[AspNetUsers] ANU ON VA.ModifiedBy = ANU.Id
+		WHERE CVA.VirtualNumberId = @VirtualNumberId
+		UNION
+		SELECT 
+			CVAT.ClientVAId Id
+           ,CVAT.ClientId
+		   ,ISNULL(ISNULL(C.Code, CT.Code), VA.ClientNumber) ClientNumber
+		   ,C.[Name] ClientName
+		   ,CVAT.[Status] 
+		   ,CASE WHEN CVAT.[Status] = N'A'
+				THEN 'Active'
+				ELSE 'Inactive'
+			END StatusDesc
+		   ,VA.ModifiedAt CreatedAt
+		   ,ANU.UserName CreatedBy
+		FROM [dbo].ClientVATemp CVAT
+		LEFT JOIN [dbo].Client C ON CVAT.ClientId = C.Id
+		LEFT JOIN [dbo].[ClientTemp] CT ON CVAT.ClientId = CT.ClientId
+		INNER JOIN [dbo].VirtualAccountTemp VA ON CVAT.VirtualNumberId = VA.VirtualAccountId
+		LEFT JOIN [dbo].[AspNetUsers] ANU ON VA.ModifiedBy = ANU.Id
+		WHERE CVAT.VirtualNumberId = @VirtualNumberId
+	) A
+	
+	SELECT
+		CVT.Id
+	   ,CVT.ClientId
+	   ,CVT.ClientNumber
+	   ,CVT.ClientName
+	   ,CVT.[Status]
+	   ,CVT.StatusDesc
+	   ,CVT.CreatedAt
+	   ,CVT.CreatedBy
+	FROM (
+		SELECT 
+			ROW_NUMBER() OVER(Partition BY CONCAT([Id],[ClientId]) ORDER BY CreatedAt DESC) AS RowNumber
+		   ,Id
+		   ,ClientId
+		   ,ClientNumber
+		   ,ClientName
+		   ,[Status]
+		   ,StatusDesc
+		   ,CreatedAt
+		   ,CreatedBy
+		FROM #ClientVATemp
+	) CVT
+	WHERE CVT.RowNumber = 1
+	ORDER BY CVT.[Status]
+	
+	DROP TABLE #ClientVATemp
+END
+
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_VirtualAccount_GridView]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROC [dbo].[SP_VirtualAccount_GridView]
+(
+	@BrokerId INT,
+	@SortOrder VARCHAR(4),
+	@SortColumn VARCHAR(50)
+)
+AS
+BEGIN
+	SELECT * INTO #VATemp
+	FROM (
+			SELECT 
+				VA.Id
+			   ,CONCAT(VA.Bin, VA.Code) AS Code
+			   ,B.Name as BrokerName
+			   ,VA.CurrencyCode
+			   ,ISNULL(C.Code, VA.ClientNumber) AS ClientNumber
+			   ,ISNULL(C.Name, N'') [Name]
+			   ,VA.Balanced
+			   ,VA.BrokerId
+			   ,VA.ModifiedAt
+			   ,VA.ModifiedBy
+			   ,VA.[Status]
+			   ,CASE WHEN VA.[Status] = 'A'
+						THEN 'Approved'
+					 ELSE
+						NULL
+				END [StatusDesc]
+			FROM [dbo].[VirtualAccount] VA WITH(NOLOCK)
+			INNER JOIN [dbo].ClientVA CVA WITH(NOLOCK)
+				ON VA.Id = CVA.VirtualNumberId AND CVA.[Status] = N'A'
+			LEFT JOIN [dbo].Client C WITH(NOLOCK)
+				ON CVA.ClientId = C.Id
+			LEFT JOIN [dbo].Broker B
+				ON VA.BrokerId = B.Id
+			UNION
+			SELECT 
+				VA.VirtualAccountId Id
+			   ,CONCAT(VA.Bin, VA.Code) AS Code
+			   ,B.Name as BrokerName
+			   ,VA.CurrencyCode
+			   ,ISNULL(C.Code, VA.ClientNumber) AS ClientNumber
+			   ,ISNULL(C.Name, N'') [Name]
+			   ,VA.Balanced
+			   ,VA.BrokerId
+			   ,VA.ModifiedAt
+			   ,VA.ModifiedBy
+			   ,VA.[Status]
+			   ,CASE WHEN VA.[Status] = 'P'
+					THEN 'Waiting for Approval'
+				 WHEN VA.[Status] = 'A'
+					THEN 'Waiting for Approval'
+				 WHEN VA.[Status] = 'D'
+					THEN 'Draft'
+				 ELSE
+					NULL
+				END [StatusDesc]
+			FROM [dbo].[VirtualAccountTemp] VA WITH(NOLOCK)
+			INNER JOIN [dbo].ClientVATemp CVA WITH(NOLOCK)
+				ON VA.VirtualAccountId = CVA.VirtualNumberId
+			LEFT JOIN [dbo].Client C WITH(NOLOCK)
+				ON CVA.ClientId = C.Id
+			LEFT JOIN [dbo].Broker B
+				ON VA.BrokerId = B.Id
+	) A
+
+	IF(@BrokerId IS NULL)
+	BEGIN
+		SELECT
+			VA.Id
+		   ,VA.Code
+		   ,VA.BrokerName
+		   ,VA.CurrencyCode
+		   ,VA.ClientNumber
+		   ,VA.Name AS ClientName
+		   ,VA.Balanced
+		   ,VA.BrokerId
+		   ,VA.[Status]
+		   ,VA.StatusDesc
+		   ,VA.ModifiedAt
+		   ,ANU.UserName AS ModifiedBy
+		FROM (
+			SELECT 
+			    ROW_NUMBER() OVER(Partition by Id ORDER BY ModifiedAt DESC) AS RowNumber
+			   ,Id
+			   ,Code
+		       ,BrokerName
+			   ,CurrencyCode
+			   ,ClientNumber
+			   ,Name
+			   ,Balanced
+			   ,BrokerId
+			   ,[Status]
+			   ,StatusDesc
+			   ,ModifiedAt
+			   ,ModifiedBy
+			   ,CASE WHEN [Status] = N'P' THEN 1
+					 WHEN [Status] <> N'P' THEN 0
+					 ELSE NULL
+			    END ViewType
+			FROM #VATemp
+		) VA
+		INNER JOIN [dbo].[AspNetUsers] ANU WITH(NOLOCK)
+			ON VA.ModifiedBy = ANU.Id
+		WHERE VA.RowNumber = 1 AND VA.[Status] IN ('D','P','A')
+		ORDER BY 
+			CASE WHEN @SortColumn = 'VANumber' AND @SortOrder = 'desc' THEN Code END DESC,
+			CASE WHEN @SortColumn = 'VANumber' AND @SortOrder = 'asc' THEN Code END ASC,
+			CASE WHEN @SortColumn = 'Currency' AND @SortOrder = 'desc' THEN CurrencyCode END DESC,
+			CASE WHEN @SortColumn = 'Currency' AND @SortOrder = 'asc' THEN CurrencyCode END ASC,
+			CASE WHEN @SortColumn = 'ClientName' AND @SortOrder = 'desc' THEN Name END DESC,
+			CASE WHEN @SortColumn = 'ClientName' AND @SortOrder = 'asc' THEN Name END ASC,
+			CASE WHEN @SortColumn = 'Balanced' AND @SortOrder = 'desc' THEN Name END DESC,
+			CASE WHEN @SortColumn = 'Balanced' AND @SortOrder = 'asc' THEN Name END ASC,
+			CASE WHEN @SortColumn = 'VAStatus' AND @SortOrder = 'desc' THEN StatusDesc END DESC,
+			CASE WHEN @SortColumn = 'VAStatus' AND @SortOrder = 'asc' THEN StatusDesc END ASC,
+			CASE WHEN @SortColumn IS NULL AND @SortOrder = 'asc' THEN ModifiedAt END ASC,
+			[Status] DESC, ModifiedAt DESC
+	END
+	ELSE
+	BEGIN
+		SELECT
+			VA.Id
+		   ,VA.Code
+		   ,VA.BrokerName
+		   ,VA.CurrencyCode
+		   ,VA.ClientNumber
+		   ,VA.Name AS ClientName
+		   ,VA.Balanced
+		   ,VA.BrokerId
+		   ,VA.[Status]
+		   ,VA.StatusDesc
+		   ,VA.ModifiedAt
+		   ,ANU.UserName AS ModifiedBy
+		FROM (
+			SELECT 
+			    ROW_NUMBER() OVER(Partition by Id ORDER BY ModifiedAt DESC) AS RowNumber
+			   ,Id
+			   ,Code
+		       ,BrokerName
+			   ,CurrencyCode
+			   ,ClientNumber
+			   ,Name
+			   ,Balanced
+			   ,BrokerId
+			   ,[Status]
+			   ,StatusDesc
+			   ,ModifiedAt
+			   ,ModifiedBy
+			   ,CASE WHEN [Status] = N'P' THEN 1
+					 WHEN [Status] <> N'P' THEN 0
+					 ELSE NULL
+			    END ViewType
+			FROM #VATemp
+		) VA
+		INNER JOIN [dbo].[AspNetUsers] ANU WITH(NOLOCK)
+			ON VA.ModifiedBy = ANU.Id
+		WHERE VA.RowNumber = 1 AND VA.BrokerId = @BrokerId AND VA.[Status] IN ('D','P','A')
+		ORDER BY 
+			CASE WHEN @SortColumn = 'VANumber' AND @SortOrder = 'desc' THEN Code END DESC,
+			CASE WHEN @SortColumn = 'VANumber' AND @SortOrder = 'asc' THEN Code END ASC,
+			CASE WHEN @SortColumn = 'Currency' AND @SortOrder = 'desc' THEN CurrencyCode END DESC,
+			CASE WHEN @SortColumn = 'Currency' AND @SortOrder = 'asc' THEN CurrencyCode END ASC,
+			CASE WHEN @SortColumn = 'ClientName' AND @SortOrder = 'desc' THEN Name END DESC,
+			CASE WHEN @SortColumn = 'ClientName' AND @SortOrder = 'asc' THEN Name END ASC,
+			CASE WHEN @SortColumn = 'Balanced' AND @SortOrder = 'desc' THEN Name END DESC,
+			CASE WHEN @SortColumn = 'Balanced' AND @SortOrder = 'asc' THEN Name END ASC,
+			CASE WHEN @SortColumn = 'VAStatus' AND @SortOrder = 'desc' THEN StatusDesc END DESC,
+			CASE WHEN @SortColumn = 'VAStatus' AND @SortOrder = 'asc' THEN StatusDesc END ASC,
+			CASE WHEN @SortColumn IS NULL AND @SortOrder = 'asc' THEN ModifiedAt END ASC,
+			[Status] DESC, ModifiedAt DESC
+	END
+	
+	DROP TABLE #VATemp
+END
+-- VERSION [20191220.01]
+
+
+GO
+/****** Object:  StoredProcedure [dbo].[SP_VirtualAccount_Insert]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE 
+PROC [dbo].[SP_VirtualAccount_Insert]
+(
+	@TempType VARCHAR(2), 
+	@CurrencyCode VARCHAR(20),
+	@Bin VARCHAR(4),
+	@Code VARCHAR(20),
+	@ClientId UNIQUEIDENTIFIER,
+	@ClientCode VARCHAR(20),
+	@Balance DECIMAL(14,2),
+	@Status VARCHAR(2),
+	@UserId UNIQUEIDENTIFIER,
+	@BrokerId INT,
+	@IsSuperUser BIT
+)
+AS
+BEGIN
+	--DECLARE 
+	--  @VAId UNIQUEIDENTIFIER = NEWID(),
+	--	@TempType VARCHAR(2) = 'I', 
+	--	@CurrencyCode VARCHAR(20) = 'IDR',
+	--	@Bin VARCHAR(4) = '4045',
+	--	@Code VARCHAR(20) = '1234567890',
+	--	@ClientId UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER),
+	--	@ClientCode VARCHAR(20) = 'EFS001',
+	--	@Balance DECIMAL(14,2) = 0,
+	--	@Status VARCHAR(2) = 'WA',
+	--	@User UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER),
+	--	@BrokerId INT = 1,
+	--	@IsSuperUser BIT = 0
+
+	BEGIN TRY
+		DECLARE @VAId UNIQUEIDENTIFIER = NEWID(), @ClientVAStatus VARCHAR(2) = 'A', @ClientStatus VARCHAR = 'DR', @GuidEmpty UNIQUEIDENTIFIER = CAST(CAST(0 AS BINARY) AS UNIQUEIDENTIFIER)
+
+		IF @ClientId = @GuidEmpty
+		BEGIN
+			SET @ClientId = NEWID()
+			INSERT INTO ClientTemp(TempType, ClientId, Code, ParentCode, GroupCode, IndustryId, BranchLocCode, Name, Email1, CountryCode, CityCode, Phone, IsHeadOffice, IsInsurance, InsuranceId, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+			VALUES(@TempType, @ClientId, @ClientCode, '-', '-', 0, '-', '-', 'sample@example.com', '-', '-', '-', 0, 0, @GuidEmpty, @ClientStatus, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+		END
+
+		IF @IsSuperUser = 1
+		BEGIN
+			INSERT INTO VirtualAccount(Id, CurrencyCode, Bin, Code, ClientNumber, Balanced, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+			VALUES(@VAId, @CurrencyCode, @Bin, @Code, @ClientCode, @Balance, @Status, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+
+			INSERT INTO ClientVA(ClientId, VirtualNumberId, Status)
+			VALUES(@ClientId, @VAId, @ClientVAStatus)
+		END
+		ELSE
+		BEGIN
+			INSERT INTO VirtualAccountTemp(TempType, VirtualAccountId, CurrencyCode, Bin, Code, ClientNumber, Balanced, Status, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy, BrokerId)
+			VALUES(@TempType, @VAId, @CurrencyCode, @Bin, @Code, @ClientCode, @Balance, @Status, GETDATE(), @UserId, GETDATE(), @UserId, @BrokerId)
+
+			INSERT INTO ClientVATemp(TempType, ClientVAId, ClientTempId, ClientId, VirtualNumberId, Status)
+			VALUES(@TempType, NEWID(), @GuidEmpty, @ClientId, @VAId, @ClientVAStatus)
+		END
+
+		SELECT 'OK' [Message]
+	END TRY
+	BEGIN CATCH
+		SELECT ERROR_MESSAGE() [Message]
+	END CATCH
+END
+--VERSION [V20191216.01]
+
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[fnSplitString]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- CODE HERE --
+CREATE FUNCTION [dbo].[fnSplitString] 
+( 
+    @string NVARCHAR(MAX), 
+    @delimiter CHAR(1) 
+) 
+	RETURNS @output TABLE(Row INT IDENTITY(1,1),Data varchar(MAX)) 
+	BEGIN 
+		DECLARE @start INT, @end INT 
+		SELECT @start = 1, @end = CHARINDEX(@delimiter, @string) 
+		WHILE @start < LEN(@string) + 1 BEGIN 
+			IF @end = 0  
+				SET @end = LEN(@string) + 1
+       
+			INSERT INTO @output (Data)  
+			VALUES(SUBSTRING(@string, @start, @end - @start)) 
+			SET @start = @end + 1 
+			SET @end = CHARINDEX(@delimiter, @string, @start)
+        
+		END 
+    RETURN 
+END
+-- END CODE HERE --
+
+-- VERSION [20190508.01]
+
+
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[GetBrokerEmail]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE FUNCTION [dbo].[GetBrokerEmail]
+(
+	@brokerId INT
+)
+RETURNS @output TABLE(Email VARCHAR(256))
+BEGIN
+	INSERT INTO @output
+	SELECT
+		Email
+	FROM CustomerUser UB
+	INNER JOIN AspNetUsers ANU ON UB.UserId = ANU.Id
+	WHERE DefaultUser = 1 AND BrokerId = @brokerId
+
+	RETURN
+END
+
+
+GO
+/****** Object:  UserDefinedFunction [dbo].[HtmlRemove]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+-- CODE HERE --
+CREATE FUNCTION [dbo].[HtmlRemove] (@HTMLText VARCHAR(MAX))
+RETURNS VARCHAR(MAX) AS
+BEGIN
+    DECLARE @Start INT
+    DECLARE @End INT
+    DECLARE @Length INT
+    SET @Start = CHARINDEX('<',@HTMLText)
+    SET @End = CHARINDEX('>',@HTMLText,CHARINDEX('<',@HTMLText))
+    SET @Length = (@End - @Start) + 1
+    WHILE @Start > 0 AND @End > 0 AND @Length > 0
+    BEGIN
+        SET @HTMLText = STUFF(@HTMLText,@Start,@Length,'')
+        SET @Start = CHARINDEX('<',@HTMLText)
+        SET @End = CHARINDEX('>',@HTMLText,CHARINDEX('<',@HTMLText))
+        SET @Length = (@End - @Start) + 1
+    END
+    RETURN LTRIM(RTRIM(@HTMLText))
+END
+-- END CODE HERE --
+
+-- VERSION [20190508.01]
+
+
+
+GO
+/****** Object:  Table [dbo].[__MigrationHistory]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[__MigrationHistory](
+	[MigrationId] [nvarchar](150) NOT NULL,
+	[ContextKey] [nvarchar](300) NOT NULL,
+	[Model] [varbinary](max) NOT NULL,
+	[ProductVersion] [nvarchar](32) NOT NULL,
+ CONSTRAINT [PK_dbo.__MigrationHistory] PRIMARY KEY CLUSTERED 
+(
+	[MigrationId] ASC,
+	[ContextKey] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[APCounterpart]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[APCounterpart](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerID] [int] NOT NULL,
+	[Entity] [nvarchar](20) NOT NULL,
+	[Branch] [nvarchar](20) NOT NULL,
+	[CounterpartCode] [nvarchar](20) NOT NULL,
+	[CounterpartName] [varchar](60) NOT NULL,
+	[Email] [nvarchar](320) NULL,
+	[Email2] [nvarchar](320) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](20) NULL,
+	[Address] [nvarchar](200) NULL,
+	[PostalCode] [nvarchar](10) NULL,
+	[IsEnableAccessMore] [bit] NULL,
+	[IsEnableCrossSett] [bit] NULL,
+	[IsRegisterAsAR] [bit] NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[BranchLocCode] [nvarchar](3) NULL,
+	[AccountNumber] [nvarchar](max) NULL,
+	[BankName] [nvarchar](max) NULL,
+	[BankBranch] [nvarchar](max) NULL,
+	[BankAddress] [nvarchar](max) NULL,
+	[RTGS] [bit] NULL,
+	[ResidentStatus] [bit] NULL,
+	[CitizenshipCode] [nvarchar](max) NULL,
+	[RelationShipCode] [nvarchar](max) NULL,
+	[EnableDirectbilling] [bit] NULL,
+	[VerifStatEmail1] [nvarchar](50) NULL,
+	[VerifStatEmail2] [nvarchar](50) NULL,
+	[PasswordAtt] [nvarchar](50) NULL,
+	[VeriPasswordAtt] [nvarchar](50) NULL,
+	[SentDateEmail1Verified] [datetime] NULL,
+	[SentDateEmail2Verified] [datetime] NULL,
+	[SentDatePasswordAttVerified] [datetime] NULL,
+	[ExpiredDateEmail1Verified] [datetime] NULL,
+	[ExpiredDateEmail2Verified] [datetime] NULL,
+	[ExpiredDatePasswordAttVerified] [datetime] NULL,
+ CONSTRAINT [PK_APCounterpart] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[APCounterpart_MapField]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_MapField](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpartId] [uniqueidentifier] NOT NULL,
+	[APField] [int] NOT NULL,
+	[CounterpartARField] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+ CONSTRAINT [PK_APCounterpart_MapField] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_MapFieldTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_MapFieldTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpartId] [uniqueidentifier] NOT NULL,
+	[APField] [int] NOT NULL,
+	[CounterpartARField] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+	[TypeTran] [nvarchar](5) NOT NULL,
+	[Comment] [nvarchar](max) NULL,
+	[MainId] [uniqueidentifier] NULL,
+ CONSTRAINT [PK_APCounterpart_MapFieldTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_UpdateField]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_UpdateField](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpartId] [uniqueidentifier] NOT NULL,
+	[APField] [int] NOT NULL,
+	[CounterpartARField] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+ CONSTRAINT [PK_APCounterpart_UpdateField] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_UpdateFieldTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_UpdateFieldTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpartId] [uniqueidentifier] NOT NULL,
+	[APField] [int] NOT NULL,
+	[CounterpartARField] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+	[TypeTran] [nvarchar](5) NULL,
+	[Comment] [nvarchar](max) NULL,
+	[MainId] [uniqueidentifier] NULL,
+ CONSTRAINT [PK_APCounterpart_UpdateFieldTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_Upload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_Upload](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerID] [int] NULL,
+	[Entity] [nvarchar](max) NULL,
+	[Branch] [nvarchar](max) NULL,
+	[CounterpartCode] [nvarchar](max) NULL,
+	[CounterpartName] [nvarchar](max) NULL,
+	[Email] [nvarchar](320) NULL,
+	[Email2] [nvarchar](320) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](max) NULL,
+	[Address] [nvarchar](max) NULL,
+	[PostalCode] [nvarchar](max) NULL,
+	[IsEnableAccessMore] [bit] NULL,
+	[IsRegisterAsAR] [bit] NULL,
+	[Status] [nvarchar](5) NULL,
+	[CreatedBy] [nvarchar](50) NULL,
+	[CreatedAt] [datetime] NULL,
+	[UserId] [nvarchar](max) NULL,
+	[UserName] [nvarchar](max) NULL,
+	[UserEmail] [nvarchar](max) NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_APCounterpart_Upload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_User]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_User](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpart] [uniqueidentifier] NOT NULL,
+	[UserId] [nvarchar](255) NULL,
+	[UserName] [nvarchar](30) NOT NULL,
+	[Email] [nvarchar](50) NOT NULL,
+	[CreatedBy] [nvarchar](max) NULL,
+	[CreatedAt] [datetime] NULL,
+	[ModifiedBy] [nvarchar](max) NULL,
+	[ModifiedAt] [datetime] NULL,
+	[Password] [nvarchar](50) NULL,
+	[Status] [nvarchar](5) NULL,
+	[IsVerified] [bit] NULL,
+	[SentEmailVerified] [datetime] NULL,
+	[ExpiredEmailVerified] [datetime] NULL,
+	[IsRejected] [bit] NULL,
+	[IsExpired] [bit] NULL,
+ CONSTRAINT [PK_APCounterpart_User] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpart_UserTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[APCounterpart_UserTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[APCounterpart] [uniqueidentifier] NOT NULL,
+	[UserId] [nvarchar](255) NULL,
+	[UserName] [nvarchar](30) NOT NULL,
+	[Email] [nvarchar](50) NOT NULL,
+	[CreatedBy] [nvarchar](max) NULL,
+	[CreatedAt] [datetime] NULL,
+	[ModifiedBy] [nvarchar](max) NULL,
+	[ModifiedAt] [datetime] NULL,
+	[Password] [nvarchar](50) NULL,
+	[Comment] [nvarchar](max) NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[TypeTran] [nvarchar](5) NULL,
+	[MainId] [uniqueidentifier] NULL,
+ CONSTRAINT [PK_APCounterpart_UserTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[APCounterpartTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[APCounterpartTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerID] [int] NOT NULL,
+	[Entity] [nvarchar](20) NOT NULL,
+	[Branch] [nvarchar](20) NOT NULL,
+	[CounterpartCode] [nvarchar](20) NOT NULL,
+	[CounterpartName] [varchar](60) NOT NULL,
+	[Email] [nvarchar](320) NULL,
+	[Email2] [nvarchar](320) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](20) NULL,
+	[Address] [nvarchar](200) NULL,
+	[PostalCode] [nvarchar](10) NULL,
+	[IsEnableAccessMore] [bit] NULL,
+	[IsEnableCrossSett] [bit] NULL,
+	[IsRegisterAsAR] [bit] NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[TypeTran] [nvarchar](3) NULL,
+	[Comment] [nvarchar](max) NULL,
+	[MainId] [uniqueidentifier] NULL,
+	[IsFromUpload] [bit] NULL,
+ CONSTRAINT [PK_APCounterpartTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterpart]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterpart](
+	[Id] [uniqueidentifier] NOT NULL,
+	[GroupCode] [nvarchar](20) NULL,
+	[EntityName] [nvarchar](20) NOT NULL,
+	[ClientCd] [nvarchar](20) NOT NULL,
+	[ClientName] [nvarchar](50) NOT NULL,
+	[BranchName] [nvarchar](20) NULL,
+	[Email] [nvarchar](320) NULL,
+	[Email2] [nvarchar](320) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](50) NULL,
+	[IsEnableCrossSet] [bit] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [varchar](5) NULL,
+	[CustomerID] [nvarchar](max) NULL,
+	[VerifStatEmail1] [nvarchar](50) NULL,
+	[VerifStatEmail2] [nvarchar](50) NULL,
+	[PasswordAtt] [nvarchar](50) NULL,
+	[VeriPasswordAtt] [nvarchar](50) NULL,
+	[SentDateEmail1Verified] [datetime] NULL,
+	[SentDateEmail2Verified] [datetime] NULL,
+	[SentDatePasswordAttVerified] [datetime] NULL,
+	[ExpiredDateEmail1Verified] [datetime] NULL,
+	[ExpiredDateEmail2Verified] [datetime] NULL,
+	[ExpiredDatePasswordAttVerified] [datetime] NULL,
+ CONSTRAINT [PK_ARCounterpart] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterpart_MapField]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ARCounterpart_MapField](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterpartId] [uniqueidentifier] NOT NULL,
+	[MyAPOutstanding] [int] NOT NULL,
+	[CounterpartARSet] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+ CONSTRAINT [PK_ARCounterpart_MapField] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ARCounterpart_MapFieldTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterpart_MapFieldTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterpartId] [uniqueidentifier] NOT NULL,
+	[MyAPOutstanding] [int] NOT NULL,
+	[CounterpartARSet] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[TypeTran] [varchar](3) NOT NULL,
+	[Comment] [nvarchar](max) NULL,
+	[MainId] [uniqueidentifier] NULL,
+	[CounterpartId] [nvarchar](50) NULL,
+ CONSTRAINT [PK_ARCounterpart_MapFieldTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterpart_UpdateField]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ARCounterpart_UpdateField](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterpartId] [uniqueidentifier] NOT NULL,
+	[MyARSett] [int] NOT NULL,
+	[CounterpartAPSett] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[CounterpartId] [nvarchar](50) NOT NULL,
+ CONSTRAINT [PK_ARCounterpart_UpdateField] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ARCounterpart_UpdateFieldTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterpart_UpdateFieldTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterpartId] [uniqueidentifier] NOT NULL,
+	[MyARSett] [int] NOT NULL,
+	[CounterpartAPSett] [int] NOT NULL,
+	[Status] [nvarchar](5) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[TypeTran] [varchar](3) NULL,
+	[Comment] [nvarchar](max) NULL,
+	[MainId] [uniqueidentifier] NULL,
+	[CounterpartId] [nvarchar](50) NULL,
+ CONSTRAINT [PK_ARCounterpart_UpdateFieldTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterPart_VA]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterPart_VA](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterPart] [uniqueidentifier] NOT NULL,
+	[VAId] [nvarchar](20) NOT NULL,
+	[Status] [varchar](10) NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NULL,
+	[ModifiedAt] [datetime] NULL,
+ CONSTRAINT [PK_ARCounterPart_VA] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterPart_VATemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterPart_VATemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ARCounterPart] [uniqueidentifier] NOT NULL,
+	[VAId] [nvarchar](max) NOT NULL,
+	[Status] [varchar](10) NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NULL,
+	[ModifiedAt] [datetime] NULL,
+	[TypeTran] [varchar](5) NULL,
+	[Client_VA_Main] [uniqueidentifier] NULL,
+ CONSTRAINT [PK_ARCounterPart_VATemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterpartTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ARCounterpartTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[GroupCode] [nvarchar](20) NULL,
+	[EntityName] [nvarchar](20) NOT NULL,
+	[ClientCd] [nvarchar](20) NOT NULL,
+	[ClientName] [nvarchar](50) NOT NULL,
+	[BranchName] [nvarchar](20) NULL,
+	[Email] [nvarchar](320) NULL,
+	[Email2] [nvarchar](320) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](50) NULL,
+	[IsEnableCrossSet] [bit] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [varchar](5) NULL,
+	[TypeTran] [varchar](5) NULL,
+	[CustomerID] [nvarchar](max) NULL,
+	[ClientMain] [uniqueidentifier] NULL,
+	[Comment] [nvarchar](max) NULL,
+	[IsFromUpload] [bit] NULL,
+ CONSTRAINT [PK_ARCounterpartTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ARCounterpartUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ARCounterpartUpload](
+	[Id] [uniqueidentifier] NOT NULL,
+	[GroupCode] [nvarchar](max) NULL,
+	[EntityName] [nvarchar](max) NULL,
+	[ClientCd] [nvarchar](max) NULL,
+	[ClientName] [nvarchar](max) NULL,
+	[BranchName] [nvarchar](max) NULL,
+	[Email] [nvarchar](max) NULL,
+	[Email2] [nvarchar](max) NULL,
+	[Country] [int] NULL,
+	[City] [nvarchar](max) NULL,
+	[IsEnableCrossSet] [bit] NULL,
+	[CreatedBy] [nvarchar](max) NULL,
+	[CreatedAt] [datetime] NULL,
+	[CustomerID] [nvarchar](50) NULL,
+	[PBulkID] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_ARCounterpartUpload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[AspNetRoles]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[AspNetRoles](
+	[Id] [nvarchar](128) NOT NULL,
+	[Name] [nvarchar](256) NOT NULL,
+ CONSTRAINT [PK_dbo.AspNetRoles] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[AspNetUserClaims]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[AspNetUserClaims](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[UserId] [nvarchar](128) NOT NULL,
+	[ClaimType] [nvarchar](max) NULL,
+	[ClaimValue] [nvarchar](max) NULL,
+ CONSTRAINT [PK_dbo.AspNetUserClaims] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[AspNetUserLogins]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[AspNetUserLogins](
+	[LoginProvider] [nvarchar](128) NOT NULL,
+	[ProviderKey] [nvarchar](128) NOT NULL,
+	[UserId] [nvarchar](128) NOT NULL,
+ CONSTRAINT [PK_dbo.AspNetUserLogins] PRIMARY KEY CLUSTERED 
+(
+	[LoginProvider] ASC,
+	[ProviderKey] ASC,
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[AspNetUserRoles]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[AspNetUserRoles](
+	[UserId] [nvarchar](128) NOT NULL,
+	[RoleId] [nvarchar](128) NOT NULL,
+ CONSTRAINT [PK_dbo.AspNetUserRoles] PRIMARY KEY CLUSTERED 
+(
+	[UserId] ASC,
+	[RoleId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[AspNetUsers]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[AspNetUsers](
+	[Id] [nvarchar](128) NOT NULL,
+	[LastPasswordChangedDate] [datetime] NULL,
+	[Email] [nvarchar](256) NULL,
+	[EmailConfirmed] [bit] NOT NULL,
+	[PasswordHash] [nvarchar](max) NULL,
+	[SecurityStamp] [nvarchar](max) NULL,
+	[PhoneNumber] [nvarchar](max) NULL,
+	[PhoneNumberConfirmed] [bit] NOT NULL,
+	[TwoFactorEnabled] [bit] NOT NULL,
+	[LockoutEndDateUtc] [datetime] NULL,
+	[LockoutEnabled] [bit] NOT NULL,
+	[AccessFailedCount] [int] NOT NULL,
+	[UserName] [nvarchar](256) NOT NULL,
+	[UserID] [nvarchar](255) NULL,
+	[BrokerID] [int] NULL,
+ CONSTRAINT [PK_dbo.AspNetUsers] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[BranchLoc]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BranchLoc](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Code] [nvarchar](3) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+ CONSTRAINT [PK_dbo.BranchLoc] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[BulkUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[BulkUpload](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[FileName] [varchar](200) NULL,
+	[ModulName] [varchar](200) NULL,
+	[UploadDate] [datetime] NOT NULL,
+	[FileDownloadUrl] [varchar](200) NULL,
+	[IsDone] [bit] NOT NULL,
+	[TransactionType] [nchar](10) NOT NULL,
+	[UploadBy] [uniqueidentifier] NOT NULL,
+	[StatusUpload] [varchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[BulkUploadHistory]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BulkUploadHistory](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[BulkUploadId] [int] NOT NULL,
+	[Message] [nvarchar](1024) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[BulkUploadMonitoring]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BulkUploadMonitoring](
+	[FileName] [nvarchar](250) NOT NULL,
+	[Module] [nvarchar](50) NOT NULL,
+	[UploadDate] [datetime] NOT NULL,
+	[LastStatus] [nvarchar](50) NOT NULL,
+	[StatusDate] [datetime] NOT NULL,
+	[Controller] [nvarchar](50) NOT NULL,
+	[Action] [nvarchar](50) NOT NULL,
+	[Id] [uniqueidentifier] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedDate] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedDate] [datetime] NOT NULL,
+ CONSTRAINT [PK_BulkUploadMonitoring] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[BulkUploadMonitoringBU]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[BulkUploadMonitoringBU](
+	[FileName] [nvarchar](250) NOT NULL,
+	[Module] [nvarchar](50) NOT NULL,
+	[UploadDate] [datetime] NOT NULL,
+	[LastStatus] [nvarchar](50) NOT NULL,
+	[StatusDate] [datetime] NOT NULL,
+	[Controller] [nvarchar](50) NOT NULL,
+	[Action] [nvarchar](50) NOT NULL,
+	[Id] [uniqueidentifier] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedDate] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedDate] [datetime] NOT NULL
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[City]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[City](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CountryCode] [nvarchar](20) NOT NULL,
+	[ProvinceCode] [nvarchar](20) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.City] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Client_]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Client_](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[ParentCode] [nvarchar](20) NULL,
+	[GroupCode] [nvarchar](50) NULL,
+	[IndustryId] [int] NOT NULL,
+	[BranchLocCode] [nvarchar](max) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Email1] [varchar](8000) NOT NULL,
+	[Email2] [varchar](8000) NULL,
+	[CountryCode] [nvarchar](20) NULL,
+	[CityCode] [nvarchar](20) NULL,
+	[Phone] [nvarchar](20) NOT NULL,
+	[IsHeadOffice] [bit] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[IsInsurance] [bit] NOT NULL,
+	[InsuranceId] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Client] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ClientTemp_]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ClientTemp_](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ClientId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Code] [nvarchar](20) NULL,
+	[ParentCode] [nvarchar](20) NULL,
+	[GroupCode] [nvarchar](50) NULL,
+	[IndustryId] [int] NOT NULL,
+	[BranchLocCode] [nvarchar](max) NULL,
+	[Name] [nvarchar](50) NULL,
+	[Email1] [varchar](8000) NULL,
+	[Email2] [varchar](8000) NULL,
+	[CountryCode] [nvarchar](20) NULL,
+	[CityCode] [nvarchar](20) NULL,
+	[Phone] [nvarchar](20) NULL,
+	[IsHeadOffice] [bit] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[IsInsurance] [bit] NOT NULL,
+	[InsuranceId] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.ClientTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ClientVA]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ClientVA](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ClientId] [uniqueidentifier] NOT NULL,
+	[VirtualNumberId] [uniqueidentifier] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.ClientVA] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ClientVATemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ClientVATemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ClientVAId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[ClientTempId] [uniqueidentifier] NOT NULL,
+	[ClientId] [uniqueidentifier] NOT NULL,
+	[VirtualNumberId] [uniqueidentifier] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.ClientVATemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CommonListValue]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CommonListValue](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[ParentId] [int] NULL,
+	[Value] [nvarchar](256) NOT NULL,
+	[Text] [nvarchar](256) NULL,
+	[Desc] [nvarchar](256) NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[configFileUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[configFileUpload](
+	[id] [int] IDENTITY(1,1) NOT NULL,
+	[customerID] [uniqueidentifier] NOT NULL,
+	[configType] [nvarchar](30) NOT NULL,
+	[FileFormat] [nvarchar](5) NOT NULL,
+	[RowStart] [int] NOT NULL,
+	[Delimeter] [nvarchar](2) NOT NULL,
+	[UploadSuccessType] [nvarchar](20) NOT NULL,
+	[ColumnName] [nvarchar](20) NOT NULL,
+	[ColumnLabel] [nvarchar](20) NOT NULL,
+	[ColumnType] [nvarchar](20) NOT NULL,
+	[sentSettlementEmail] [bit] NULL,
+	[sentSettlementConfirmation] [bit] NULL,
+	[isUnique] [bit] NULL,
+	[isKey] [bit] NULL,
+	[isSettlementField] [bit] NULL,
+	[createdBy] [uniqueidentifier] NULL,
+	[createdAt] [datetime] NULL,
+	[modifiedBy] [uniqueidentifier] NULL,
+	[modifiedAt] [datetime] NULL,
+	[Status] [nvarchar](2) NULL,
+ CONSTRAINT [PK_configFileManagement] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Country]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Country](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Alpha2] [nvarchar](2) NOT NULL,
+	[Numerik] [nvarchar](3) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[EnglishName] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Country] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Coverage]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Coverage](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Coverage] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CoverageTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CoverageTemp](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CoverageId] [int] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.CoverageTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Currency]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Currency](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CountryCode] [nvarchar](20) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Currency] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Customer]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Customer](
+	[Id] [int] IDENTITY(0,1) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Phone] [nvarchar](20) NULL,
+	[Address] [nvarchar](150) NULL,
+	[Email] [nvarchar](150) NULL,
+	[Enabled] [bit] NOT NULL,
+	[Subcribed] [bit] NOT NULL,
+	[SettlementType] [varchar](50) NULL,
+	[TransactionType] [varchar](50) NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[Website] [nvarchar](60) NULL,
+	[State] [nvarchar](50) NULL,
+	[Country] [nvarchar](50) NULL,
+	[City] [nvarchar](50) NULL,
+	[CustomerId] [nvarchar](50) NOT NULL,
+	[IndustryID] [int] NULL,
+ CONSTRAINT [PK_dbo.Broker] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [IX_Customer_CustomerId_Unique] UNIQUE NONCLUSTERED 
+(
+	[CustomerId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[CustomerId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[CustomerAccount]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerAccount](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CustomerPK] [int] NOT NULL,
+	[AccountNumber] [nvarchar](50) NOT NULL,
+	[CurrencyCode] [nvarchar](10) NOT NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerAccountTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerAccountTemp](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[OriginId] [int] NULL,
+	[CustomerPK] [int] NULL,
+	[CustomerTempPK] [int] NOT NULL,
+	[AccountNumber] [nvarchar](50) NOT NULL,
+	[CurrencyCode] [nvarchar](10) NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerBin]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerBin](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Code] [nvarchar](4) NOT NULL,
+	[CurrencyCode] [nvarchar](max) NOT NULL,
+	[CustomerPK] [int] NOT NULL,
+	[Status] [nvarchar](max) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[AccountNumber] [nvarchar](max) NOT NULL,
+ CONSTRAINT [PK_dbo.BrokerBin] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerBinTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerBinTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[OriginId] [uniqueidentifier] NULL,
+	[Code] [nvarchar](4) NULL,
+	[CurrencyCode] [nvarchar](max) NULL,
+	[AccountNumber] [nvarchar](max) NULL,
+	[CustomerPK] [int] NULL,
+	[CustomerTempPK] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Status] [nvarchar](max) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+ CONSTRAINT [PK_dbo.BrokerBinTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerEmailTemplate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerEmailTemplate](
+	[Id] [uniqueidentifier] NOT NULL,
+	[EmailTemplateId] [uniqueidentifier] NOT NULL,
+	[EventName] [nvarchar](50) NOT NULL,
+	[CustomerId] [nvarchar](max) NOT NULL,
+	[CustomerPK] [int] NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Subject] [nvarchar](50) NOT NULL,
+	[Content] [nvarchar](max) NOT NULL,
+	[Activated] [bit] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[isEdit] [bit] NULL,
+	[Category] [int] NULL,
+	[Description] [nvarchar](255) NULL,
+	[CC] [nvarchar](1000) NULL,
+ CONSTRAINT [PK_dbo.CustomerEmailTemplate] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerEmailTemplateTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[CustomerEmailTemplateTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[OriginId] [uniqueidentifier] NULL,
+	[EmailTemplateId] [uniqueidentifier] NOT NULL,
+	[Eventname] [nvarchar](50) NOT NULL,
+	[CustomerId] [nvarchar](max) NOT NULL,
+	[CustomerPK] [int] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Subject] [nvarchar](50) NOT NULL,
+	[Content] [nvarchar](max) NOT NULL,
+	[isEdit] [bit] NULL,
+	[Category] [int] NULL,
+	[Comment] [varchar](256) NULL,
+	[Description] [nvarchar](255) NULL,
+	[CC] [nvarchar](1000) NULL,
+	[Activated] [bit] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.CustomerEmailTemplateTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[CustomerTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[CustomerTemp](
+	[Id] [int] IDENTITY(0,1) NOT NULL,
+	[BrokerId] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Phone] [nvarchar](20) NULL,
+	[Address] [nvarchar](150) NULL,
+	[Email] [nvarchar](150) NULL,
+	[Enabled] [bit] NOT NULL,
+	[Subscribed] [bit] NOT NULL,
+	[SettlementType] [varchar](50) NULL,
+	[TransactionType] [varchar](50) NULL,
+	[Website] [nvarchar](60) NULL,
+	[State] [nvarchar](50) NULL,
+	[Country] [nvarchar](50) NULL,
+	[City] [nvarchar](50) NULL,
+	[CustomerId] [nvarchar](50) NOT NULL,
+	[IndustryID] [int] NULL,
+	[Comment] [varchar](256) NULL,
+	[UseOldData] [bit] NOT NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_CustomerTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[CustomerUser]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerUser](
+	[Id] [uniqueidentifier] NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[InsuranceId] [uniqueidentifier] NOT NULL,
+	[FirstName] [nvarchar](100) NULL,
+	[MiddleName] [nvarchar](50) NULL,
+	[LastName] [nvarchar](50) NULL,
+	[DefaultUser] [bit] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.CustomerUser] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[CustomerUserTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[CustomerUserTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[UserBrokerId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[InsuranceId] [uniqueidentifier] NOT NULL,
+	[FirstName] [nvarchar](100) NULL,
+	[MiddleName] [nvarchar](50) NULL,
+	[LastName] [nvarchar](50) NULL,
+	[DefaultUser] [bit] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[Comment] [nvarchar](max) NULL,
+	[TempStatus] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.UserBrokerTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[EmailCategory]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[EmailCategory](
+	[ID] [int] NOT NULL,
+	[Category] [varchar](255) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[EmailTemplate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[EmailTemplate](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Name] [nvarchar](100) NOT NULL,
+	[Subject] [nvarchar](255) NULL,
+	[Content] [nvarchar](max) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[isEdit] [bit] NULL,
+	[Category] [int] NULL,
+	[Event] [nvarchar](200) NULL,
+	[Description] [nvarchar](255) NULL,
+	[CC] [nvarchar](1000) NULL,
+ CONSTRAINT [PK_dbo.EmailTemplate] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[EmailTemplateTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[EmailTemplateTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[EmailTemplateId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](100) NOT NULL,
+	[Subject] [nvarchar](255) NULL,
+	[Content] [nvarchar](max) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[isEdit] [bit] NULL,
+	[Category] [int] NULL,
+	[Event] [nvarchar](255) NULL,
+	[Description] [nvarchar](255) NULL,
+	[ApprovalComment] [nvarchar](255) NULL,
+	[CC] [nvarchar](1000) NULL,
+ CONSTRAINT [PK_dbo.EmailTemplateTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ExchangeRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ExchangeRate](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NOT NULL,
+	[Rate] [decimal](14, 2) NOT NULL,
+	[EffectiveFrom] [datetime] NOT NULL,
+	[EffectiveTo] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[CustomerId] [int] NULL,
+ CONSTRAINT [PK_dbo.ExchangeRate] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ExchangeRateTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ExchangeRateTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[MainId] [uniqueidentifier] NOT NULL,
+	[TypeTran] [nvarchar](2) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NOT NULL,
+	[Rate] [decimal](18, 2) NULL,
+	[EffectiveFrom] [datetime] NOT NULL,
+	[EffectiveTo] [datetime] NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[Comment] [nvarchar](max) NULL,
+	[CustomerId] [int] NULL,
+ CONSTRAINT [PK_dbo.ExchangeRateTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ExchangeRateUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ExchangeRateUpload](
+	[CurrencyCode] [nvarchar](20) NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NULL,
+	[Rate] [decimal](14, 2) NULL,
+	[EffectiveFrom] [nvarchar](100) NULL,
+	[EffectiveTo] [nvarchar](100) NULL,
+	[CustomerId] [int] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+	[Id] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_ExchangeRateUpload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Feature]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Feature](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Description] [nvarchar](150) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Feature] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[GroupProfile]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[GroupProfile](
+	[Id] [uniqueidentifier] NOT NULL,
+	[MenuId] [int] NOT NULL,
+	[ProfileId] [int] NOT NULL,
+	[Create] [bit] NOT NULL,
+	[Read] [bit] NOT NULL,
+	[Update] [bit] NOT NULL,
+	[Delete] [bit] NOT NULL,
+	[Approve] [bit] NOT NULL,
+	[Upload] [bit] NOT NULL,
+	[Export] [bit] NOT NULL,
+	[RemoveRequest] [bit] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.GroupProfile] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[groupprofile_bck]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[groupprofile_bck](
+	[Id] [uniqueidentifier] NOT NULL,
+	[MenuId] [int] NOT NULL,
+	[ProfileId] [int] NOT NULL,
+	[Create] [bit] NOT NULL,
+	[Read] [bit] NOT NULL,
+	[Update] [bit] NOT NULL,
+	[Delete] [bit] NOT NULL,
+	[Approve] [bit] NOT NULL,
+	[Upload] [bit] NOT NULL,
+	[Export] [bit] NOT NULL,
+	[RemoveRequest] [bit] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[GroupProfileTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[GroupProfileTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[GroupProfileId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[MenuId] [int] NOT NULL,
+	[ProfileId] [int] NOT NULL,
+	[Create] [bit] NOT NULL,
+	[Read] [bit] NOT NULL,
+	[Update] [bit] NOT NULL,
+	[Delete] [bit] NOT NULL,
+	[Approve] [bit] NOT NULL,
+	[Upload] [bit] NOT NULL,
+	[Export] [bit] NOT NULL,
+	[RemoveRequest] [bit] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+ CONSTRAINT [PK_dbo.GroupProfileTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Industry]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Industry](
+	[ID] [int] IDENTITY(0,1) NOT NULL,
+	[Name] [nvarchar](450) NOT NULL,
+	[Description] [nvarchar](255) NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [UC_Industry] UNIQUE NONCLUSTERED 
+(
+	[ID] ASC,
+	[Name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[Name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[IndustryTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[IndustryTemp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[MainID] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](450) NOT NULL,
+	[Description] [nvarchar](255) NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[ApprovalComment] [nvarchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Insurance]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Insurance](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Name] [nvarchar](60) NOT NULL,
+	[BranchLocCode] [nvarchar](3) NOT NULL,
+	[InsurerBranch] [nvarchar](10) NOT NULL,
+	[Email] [varchar](8000) NOT NULL,
+	[CountryCode] [nvarchar](20) NULL,
+	[CityCode] [nvarchar](20) NULL,
+	[PostCode] [nvarchar](10) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[InsurerCode] [nvarchar](6) NOT NULL,
+	[Email2] [varchar](8000) NULL,
+	[BrokerId] [int] NOT NULL,
+	[AccountNumber] [nvarchar](max) NULL,
+	[BankName] [nvarchar](max) NULL,
+	[BankBranch] [nvarchar](max) NULL,
+	[BankAddress] [nvarchar](max) NULL,
+	[RTGS] [bit] NOT NULL,
+	[ResidentStatus] [bit] NOT NULL,
+	[CitizenshipCode] [nvarchar](max) NULL,
+	[RelationShipCode] [nvarchar](max) NULL,
+	[EnableDirectbilling] [bit] NOT NULL,
+	[Address] [nvarchar](200) NULL,
+	[EnableAccessToMore] [bit] NOT NULL,
+ CONSTRAINT [PK_dbo.Insurance] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[InsuranceTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[InsuranceTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[InsuranceId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](60) NULL,
+	[Email] [varchar](8000) NULL,
+	[CountryCode] [nvarchar](20) NULL,
+	[CityCode] [nvarchar](20) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BranchLocCode] [nvarchar](3) NULL,
+	[InsurerCode] [nvarchar](6) NULL,
+	[InsurerBranch] [nvarchar](10) NULL,
+	[PostCode] [nvarchar](10) NULL,
+	[Email2] [varchar](8000) NULL,
+	[BrokerId] [int] NOT NULL,
+	[AccountNumber] [nvarchar](max) NULL,
+	[BankName] [nvarchar](max) NULL,
+	[BankBranch] [nvarchar](max) NULL,
+	[BankAddress] [nvarchar](max) NULL,
+	[RTGS] [bit] NOT NULL,
+	[ResidentStatus] [bit] NOT NULL,
+	[CitizenshipCode] [nvarchar](max) NULL,
+	[RelationShipCode] [nvarchar](max) NULL,
+	[EnableDirectbilling] [bit] NOT NULL,
+	[Address] [nvarchar](200) NULL,
+	[EnableAccessToMore] [bit] NOT NULL,
+ CONSTRAINT [PK_dbo.InsuranceTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[MasterReportAuditrail]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[MasterReportAuditrail](
+	[Id] [uniqueidentifier] NOT NULL,
+	[TableName] [nvarchar](50) NOT NULL,
+	[TableDes] [nvarchar](100) NOT NULL,
+	[__KEY] [nvarchar](20) NOT NULL,
+	[Background] [nvarchar](20) NOT NULL,
+ CONSTRAINT [PK_dbo.MasterReportAuditrail] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Menu]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Menu](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](60) NOT NULL,
+	[Action] [nvarchar](max) NULL,
+	[Controller] [nvarchar](max) NULL,
+	[Parent] [int] NOT NULL,
+	[SubParent] [bit] NOT NULL,
+	[Icon] [nvarchar](max) NULL,
+	[ParentMenu] [nvarchar](max) NULL,
+	[SubMenu] [nvarchar](max) NULL,
+	[Seq] [int] NOT NULL,
+ CONSTRAINT [PK_dbo.Menu] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[MenuByIndustry]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[MenuByIndustry](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[IndustryID] [int] NOT NULL,
+	[MenuID] [int] NULL,
+	[OriginalMenuText] [varchar](255) NOT NULL,
+	[IndustryMenuText] [varchar](255) NOT NULL,
+	[Parent] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[menubyindustry_bck]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[menubyindustry_bck](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[IndustryID] [int] NOT NULL,
+	[MenuID] [int] NULL,
+	[OriginalMenuText] [varchar](255) NOT NULL,
+	[IndustryMenuText] [varchar](255) NOT NULL,
+	[Parent] [int] NULL
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[MenuByIndustryTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[MenuByIndustryTemp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[MainID] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[IndustryID] [int] NOT NULL,
+	[MenuID] [int] NULL,
+	[OriginalMenuText] [varchar](255) NOT NULL,
+	[IndustryMenuText] [varchar](255) NOT NULL,
+	[Parent] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Notification]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Notification](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Type] [nvarchar](20) NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[NotifStatus] [bit] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[TotalData] [int] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Notification] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfig]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfig](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[BrokerID] [int] NOT NULL,
+	[DefaultBank] [varchar](3) NOT NULL,
+	[Name] [varchar](50) NOT NULL,
+	[FileFormat] [nvarchar](5) NOT NULL,
+	[RowStart] [int] NOT NULL,
+	[Delimiter] [nvarchar](1) NULL,
+	[UploadSuccessType] [nvarchar](20) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[isActive] [bit] NULL,
+ CONSTRAINT [PK_OutUploadFileConfig] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigDetail]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigDetail](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[BrokerID] [int] NOT NULL,
+	[ConfigID] [int] NOT NULL,
+	[isView] [bit] NULL,
+	[DataField] [nvarchar](100) NOT NULL,
+	[LabelData] [nvarchar](100) NULL,
+	[DefaultValue] [nvarchar](100) NULL,
+	[UploadColumn] [nvarchar](50) NULL,
+	[Delimiter] [nvarchar](10) NULL,
+	[DataType] [nvarchar](50) NULL,
+	[DateFormat] [nvarchar](50) NULL,
+	[isUnique] [bit] NULL,
+	[isKey] [bit] NULL,
+	[Seq] [int] NULL,
+	[isReserved] [bit] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigDetailTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigDetailTemp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[MainID] [int] NULL,
+	[BrokerID] [int] NOT NULL,
+	[ConfigID] [int] NOT NULL,
+	[isView] [bit] NULL,
+	[DataField] [nvarchar](100) NOT NULL,
+	[LabelData] [nvarchar](100) NULL,
+	[DefaultValue] [nvarchar](100) NULL,
+	[UploadColumn] [nvarchar](50) NULL,
+	[Delimiter] [nvarchar](10) NULL,
+	[DataType] [nvarchar](50) NULL,
+	[DateFormat] [nvarchar](50) NULL,
+	[isUnique] [bit] NULL,
+	[isKey] [bit] NULL,
+	[Seq] [int] NULL,
+	[isReserved] [bit] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigMap]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigMap](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[BrokerID] [int] NOT NULL,
+	[APid] [int] NULL,
+	[ARid] [int] NULL,
+	[ConfigAPid] [int] NULL,
+	[ConfigARid] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigMap_bck]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigMap_bck](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[BrokerID] [int] NOT NULL,
+	[APid] [int] NULL,
+	[ARid] [int] NULL,
+	[ConfigAPid] [int] NULL,
+	[ConfigARid] [int] NULL
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigMapTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigMapTemp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[MainID] [int] NULL,
+	[BrokerID] [int] NOT NULL,
+	[APid] [int] NULL,
+	[ARid] [int] NULL,
+	[ConfigAPid] [int] NULL,
+	[ConfigARid] [int] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[OutUploadFileConfigTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[OutUploadFileConfigTemp](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[MainID] [int] NULL,
+	[BrokerID] [int] NOT NULL,
+	[DefaultBank] [varchar](3) NOT NULL,
+	[Name] [varchar](50) NOT NULL,
+	[FileFormat] [nvarchar](5) NOT NULL,
+	[RowStart] [int] NOT NULL,
+	[Delimiter] [nvarchar](1) NULL,
+	[UploadSuccessType] [nvarchar](20) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[isActive] [bit] NULL,
+	[ApprovalComment] [nvarchar](255) NULL,
+ CONSTRAINT [PK_OutUploadFileConfigTemp] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Profile]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Profile](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[Name] [nvarchar](60) NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[RoleId] [uniqueidentifier] NOT NULL,
+	[UserCategory] [nvarchar](50) NULL,
+	[isDefault] [bit] NULL,
+	[Description] [nvarchar](1000) NULL,
+ CONSTRAINT [PK_dbo.Profile] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [UC_Profile] UNIQUE NONCLUSTERED 
+(
+	[Id] ASC,
+	[Name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ProfileMember]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProfileMember](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ProfileId] [int] NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.ProfileMember] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ProfileMemberTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProfileMemberTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ProfileMemberId] [uniqueidentifier] NOT NULL,
+	[ProfileId] [int] NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[CustomerUserTempId] [uniqueidentifier] NULL,
+ CONSTRAINT [PK_dbo.ProfileMemberTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ProfileTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProfileTemp](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[ProfileId] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Name] [nvarchar](60) NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[RoleId] [uniqueidentifier] NOT NULL,
+	[UserCategory] [nvarchar](50) NULL,
+	[isDefault] [bit] NULL,
+	[Description] [nvarchar](1000) NULL,
+	[ApprovalComment] [nvarchar](255) NULL,
+ CONSTRAINT [PK_dbo.ProfileTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ProfileUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ProfileUpload](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[UserCategory] [nvarchar](50) NULL,
+	[Category] [nvarchar](50) NOT NULL,
+	[Name] [nvarchar](60) NOT NULL,
+	[Description] [nvarchar](1000) NULL,
+	[Menu] [nvarchar](50) NULL,
+	[Screen] [nvarchar](50) NULL,
+	[Create] [bit] NULL,
+	[Read] [bit] NULL,
+	[Update] [bit] NULL,
+	[Delete] [bit] NULL,
+	[Approve] [bit] NULL,
+	[Upload] [bit] NULL,
+	[Export] [bit] NULL,
+	[RemoveRequest] [bit] NULL,
+	[CreatedBy] [nvarchar](50) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[isExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_dbo.ProfileUpload] PRIMARY KEY CLUSTERED 
+(
+	[ID] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Province]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Province](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CountryCode] [nvarchar](20) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.Province] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[SettlementUploadFileConfiguration]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[SettlementUploadFileConfiguration](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerId] [nvarchar](50) NOT NULL,
+	[CustomerPK] [int] NOT NULL,
+	[DefaultBank] [varchar](50) NOT NULL,
+	[Name] [varchar](50) NOT NULL,
+	[FileFormat] [nvarchar](5) NOT NULL,
+	[RowStart] [int] NOT NULL,
+	[Delimeter] [nvarchar](2) NOT NULL,
+	[UploadSuccessType] [nvarchar](20) NOT NULL,
+	[CounterPartSettlementConfirmation] [tinyint] NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+ CONSTRAINT [PK_SettlementUploadFileConfiguration] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[SettlementUploadFileConfigurationField]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[SettlementUploadFileConfigurationField](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[UFCId] [uniqueidentifier] NOT NULL,
+	[View] [tinyint] NULL,
+	[DataField] [varchar](50) NULL,
+	[LabelData] [varchar](50) NULL,
+	[DefaultValue] [varchar](50) NULL,
+	[UploadColumn] [varchar](50) NULL,
+	[Delimiter] [varchar](50) NULL,
+	[DataType] [varchar](50) NULL,
+	[DateFormat] [varchar](50) NULL,
+	[Key] [tinyint] NULL,
+	[Unique] [tinyint] NULL,
+	[Sequence] [smallint] NULL,
+	[Reserved] [tinyint] NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[SpecificConversionRate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[SpecificConversionRate](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerId] [int] NOT NULL,
+	[ClientCd] [nvarchar](20) NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NOT NULL,
+	[Rate] [decimal](14, 2) NOT NULL,
+	[EffectiveFrom] [datetime] NOT NULL,
+	[EffectiveTo] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+ CONSTRAINT [PK_SpecificConversionRate] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[SpecificConversionRateTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[SpecificConversionRateTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[CustomerId] [int] NOT NULL,
+	[ClientCd] [nvarchar](20) NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NOT NULL,
+	[Rate] [decimal](14, 2) NOT NULL,
+	[EffectiveFrom] [datetime] NOT NULL,
+	[EffectiveTo] [datetime] NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ModifiedBy] [nvarchar](max) NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[MainId] [uniqueidentifier] NULL,
+	[TypeTran] [nvarchar](2) NULL,
+	[Comment] [nvarchar](max) NULL,
+ CONSTRAINT [PK_SpecificConversionRateTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[SpecificConversionRateUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[SpecificConversionRateUpload](
+	[Id] [uniqueidentifier] NOT NULL,
+	[ClientCode] [nvarchar](255) NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[OppositeCurrencyCode] [nvarchar](20) NOT NULL,
+	[Rate] [decimal](14, 2) NOT NULL,
+	[EffectiveFrom] [nvarchar](100) NULL,
+	[EffectiveTo] [nvarchar](100) NULL,
+	[CustomerId] [int] NOT NULL,
+	[CreatedBy] [nvarchar](max) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_SpecificConversionRateUpload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[SystemParameter]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[SystemParameter](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Name] [nvarchar](50) NOT NULL,
+	[Value] [nvarchar](max) NOT NULL,
+	[Description] [nvarchar](50) NULL,
+	[Status] [bit] NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[Unit] [nvarchar](50) NULL,
+	[Status2] [nvarchar](2) NULL,
+ CONSTRAINT [PK_dbo.SystemParameter] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[SystemParameterTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[SystemParameterTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Name] [varchar](50) NOT NULL,
+	[Value] [varchar](max) NOT NULL,
+	[Description] [varchar](50) NULL,
+	[Status] [bit] NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[SystemParameterId] [uniqueidentifier] NOT NULL,
+	[Unit] [nvarchar](50) NULL,
+	[Status2] [nvarchar](2) NULL,
+	[ApprovalComment] [nvarchar](255) NULL,
+ CONSTRAINT [PK_dbo.SystemParameterTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Tolerance]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Tolerance](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[Value] [decimal](14, 2) NOT NULL,
+	[Percentage] [decimal](14, 2) NOT NULL,
+	[DefaultValue] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_Tolerance] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ToleranceClient]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ToleranceClient](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[ClientPK] [uniqueidentifier] NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[Value] [decimal](14, 2) NOT NULL,
+	[Percentage] [decimal](14, 2) NOT NULL,
+	[DefaultValue] [nvarchar](50) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_ToleranceClient] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ToleranceClientTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ToleranceClientTemp](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[OriginId] [int] NULL,
+	[ClientPK] [uniqueidentifier] NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[Value] [decimal](14, 2) NOT NULL,
+	[Percentage] [decimal](14, 2) NOT NULL,
+	[DefaultValue] [nvarchar](50) NOT NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Comment] [varchar](256) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_dbo.ToleranceClientTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ToleranceClientUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ToleranceClientUpload](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[ClientCode] [nvarchar](20) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[Value] [nvarchar](20) NOT NULL,
+	[Percentage] [nvarchar](20) NOT NULL,
+	[DefaultValue] [nvarchar](256) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_ToleranceClientUpload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[ToleranceTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[ToleranceTemp](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[ToleranceId] [int] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NULL,
+	[Value] [decimal](14, 2) NOT NULL,
+	[Percentage] [decimal](14, 2) NOT NULL,
+	[DefaultValue] [nvarchar](50) NULL,
+	[Comment] [varchar](256) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_dbo.ToleranceTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[ToleranceUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[ToleranceUpload](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[Value] [nvarchar](20) NOT NULL,
+	[Percentage] [nvarchar](20) NOT NULL,
+	[DefaultValue] [nvarchar](256) NOT NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[BrokerId] [int] NOT NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NOT NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+ CONSTRAINT [PK_ToleranceUpload] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[UserLogin]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[UserLogin](
+	[Id] [uniqueidentifier] NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[IPAddress] [nvarchar](20) NOT NULL,
+	[Token] [nvarchar](6) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[ExpiredAt] [datetime] NOT NULL,
+	[BrowserName] [nvarchar](100) NULL,
+	[OtpEntered] [bit] NOT NULL,
+ CONSTRAINT [PK_dbo.UserLogin] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[UserLoginHistory]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[UserLoginHistory](
+	[Id] [uniqueidentifier] NOT NULL,
+	[UserName] [nvarchar](max) NOT NULL,
+	[IpAddress] [nvarchar](20) NOT NULL,
+	[LoginAt] [datetime] NOT NULL,
+	[BrowserName] [nvarchar](100) NULL,
+ CONSTRAINT [PK_dbo.UserLoginHistory] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[UserPreviousPasswords]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[UserPreviousPasswords](
+	[PasswordHash] [nvarchar](256) NOT NULL,
+	[UserId] [nvarchar](128) NOT NULL,
+	[CreateDate] [datetimeoffset](7) NOT NULL,
+ CONSTRAINT [PK_dbo.UserPreviousPasswords] PRIMARY KEY CLUSTERED 
+(
+	[PasswordHash] ASC,
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[UserTokenReset]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[UserTokenReset](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[Code] [varchar](8000) NOT NULL,
+	[ExpiredAt] [datetime] NOT NULL,
+	[IsDone] [bit] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.UserTokenReset] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[UserTokenVerify]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[UserTokenVerify](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[UserId] [uniqueidentifier] NOT NULL,
+	[Code] [varchar](8000) NOT NULL,
+	[ExpiredAt] [datetime] NOT NULL,
+	[IsDone] [bit] NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+ CONSTRAINT [PK_dbo.UserTokenVerify] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[VirtualAccount]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[VirtualAccount](
+	[Id] [uniqueidentifier] NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[CustomerBinId] [uniqueidentifier] NULL,
+	[AccountNumber] [nvarchar](50) NOT NULL,
+	[Bin] [nvarchar](4) NOT NULL,
+	[ClientNumber] [nvarchar](20) NOT NULL,
+	[ClientPK] [uniqueidentifier] NOT NULL,
+	[Status] [nvarchar](20) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[Balanced] [decimal](14, 2) NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_dbo.VirtualAccount] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[VirtualAccountTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[VirtualAccountTemp](
+	[Id] [uniqueidentifier] NOT NULL,
+	[VirtualAccountId] [uniqueidentifier] NULL,
+	[TempType] [nvarchar](2) NOT NULL,
+	[Code] [nvarchar](20) NOT NULL,
+	[CurrencyCode] [nvarchar](20) NOT NULL,
+	[CustomerBinId] [uniqueidentifier] NULL,
+	[CustomerBinTempId] [uniqueidentifier] NULL,
+	[AccountNumber] [nvarchar](50) NOT NULL,
+	[Bin] [nvarchar](4) NOT NULL,
+	[ClientNumber] [nvarchar](20) NOT NULL,
+	[ClientPK] [uniqueidentifier] NULL,
+	[ClientPKMaster] [uniqueidentifier] NULL,
+	[Comment] [varchar](256) NULL,
+	[Status] [nvarchar](2) NOT NULL,
+	[CreatedAt] [datetime] NOT NULL,
+	[CreatedBy] [uniqueidentifier] NOT NULL,
+	[ModifiedAt] [datetime] NOT NULL,
+	[ModifiedBy] [uniqueidentifier] NOT NULL,
+	[Balanced] [decimal](14, 2) NOT NULL,
+	[BrokerId] [int] NOT NULL,
+ CONSTRAINT [PK_dbo.VirtualAccountTemp] PRIMARY KEY CLUSTERED 
+(
+	[Id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[VirtualAccountUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[VirtualAccountUpload](
+	[Id] [int] IDENTITY(1,1) NOT NULL,
+	[VirtualAccountId] [nvarchar](256) NULL,
+	[TempType] [nvarchar](2) NULL,
+	[Code] [nvarchar](256) NULL,
+	[CurrencyCode] [nvarchar](256) NULL,
+	[CustomerBinId] [uniqueidentifier] NULL,
+	[CustomerBinTempId] [uniqueidentifier] NULL,
+	[AccountNumber] [nvarchar](256) NULL,
+	[Bin] [nvarchar](256) NULL,
+	[ClientNumber] [nvarchar](256) NULL,
+	[ClientPK] [nvarchar](256) NULL,
+	[ClientPKMaster] [nvarchar](256) NULL,
+	[Comment] [varchar](256) NULL,
+	[StatusData] [nvarchar](256) NULL,
+	[Status] [nvarchar](2) NULL,
+	[CreatedAt] [datetime] NULL,
+	[CreatedBy] [uniqueidentifier] NULL,
+	[ModifiedAt] [datetime] NULL,
+	[ModifiedBy] [uniqueidentifier] NULL,
+	[Balanced] [nvarchar](256) NULL,
+	[BrokerId] [nvarchar](256) NULL,
+	[ErrorMessage] [nvarchar](max) NULL,
+	[PBulkId] [uniqueidentifier] NOT NULL,
+	[IsExisting] [bit] NULL
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  View [dbo].[VW_BulkUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+CREATE VIEW [dbo].[VW_BulkUpload]
+AS
+SELECT a.*
+FROM BulkUpload a
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+
+GO
+/****** Object:  View [dbo].[VW_Customer]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE VIEW [dbo].[VW_Customer]
+AS
+SELECT a.Id
+	,a.CustomerId
+	,a.Enabled
+	,a.Subcribed
+	,a.Name CustomerName
+	,e.ID IdInsdustry
+	,e.Name IndustryName
+	,a.Phone
+	,a.Address
+	,a.Country + ' - ' + country.Name Country
+	,a.City,a.TransactionType
+	,a.SettlementType
+	,CASE 
+		WHEN a.Enabled = 'true'
+			THEN 'Enabled'
+		WHEN a.Enabled = 'false'
+			THEN 'Disabled'
+		END EnableStatus
+	,CASE 
+		WHEN ct.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN ct.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN ct.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN ct.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN ct.STATUS = 'A'
+			THEN 'Approved'
+		WHEN ct.STATUS = 'R'
+			THEN 'Rejected'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM CustomerTemp ct
+JOIN Customer a ON ct.brokerId = a.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Industry e ON a.IndustryID = e.ID
+LEFT JOIN country ON ct.Country = country.alpha2
+WHERE a.Subcribed = 1
+	AND ct.[Status] != 'A'
+	AND ct.[Status] != 'D'
+	AND ct.[Status] != 'R'
+
+UNION ALL
+
+SELECT a.Id
+	,a.CustomerId
+	,a.Enabled
+	,a.Subcribed
+	,a.Name CustomerName
+	,e.ID IdInsdustry
+	,e.Name IndustryName
+	,a.Phone
+	,a.Address
+	,a.Country + ' - ' + country.Name Country
+	,a.City
+	,a.TransactionType
+	,a.SettlementType
+	,CASE 
+		WHEN a.Enabled = 'true'
+			THEN 'Enabled'
+		WHEN a.Enabled = 'false'
+			THEN 'Disabled'
+		END EnableStatus
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		WHEN a.STATUS = 'R'
+			THEN 'Rejected'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM Customer a
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Industry e ON a.IndustryID = e.ID
+LEFT JOIN country ON a.Country = country.alpha2
+WHERE a.Subcribed = 1
+	AND a.Id != 0
+	AND a.Id NOT IN (
+		SELECT brokerid
+		FROM CustomerTemp
+		WHERE BrokerID IS NOT NULL
+			AND [Status] != 'A'
+			AND [Status] != 'D'
+			AND [Status] != 'R'
+		)
+
+GO
+/****** Object:  View [dbo].[VW_CustomerEmailTemplate]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+CREATE VIEW [dbo].[VW_CustomerEmailTemplate]
+AS
+SELECT a.CustomerId
+	,a.EmailTemplateId Id
+	,a.OriginId CetId
+	,a.Id CettId
+	,et.Name
+	,et.Subject
+	,et.Content
+	,'true' Activated
+	,CASE 
+		WHEN 1 = 1
+			THEN 'Active'
+		ELSE 'Inactive'
+		END  ActivatedDesc
+	,et.CC
+	,et.Description
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,et.CreatedAt
+	,c.UserID CreatedBy
+	,et.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,et.[Event] EventName
+FROM CustomerEmailTemplateTemp a
+left join EmailTemplate et on a.EmailTemplateId = et.Id
+LEFT JOIN AspNetUsers c ON et.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON et.ModifiedBy = d.Id
+where a.[Status] = 'WA' or a.[Status] = 'R'
+UNION ALL
+
+SELECT a.CustomerId
+	,a.EmailTemplateId Id
+	,a.Id CetId
+	,null CettId
+	,a.Name
+	,a.Subject
+	,a.Content
+	,a.Activated
+	,CASE 
+		WHEN a.Activated = 'true'
+			THEN 'Active'
+		ELSE 'Inactive'
+		END  ActivatedDesc
+	,a.CC
+	,a.Description
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,et.[Event] EventName
+FROM CustomerEmailTemplate a
+left join EmailTemplate et on a.EmailTemplateId = et.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+WHERE a.Id NOT IN (
+		SELECT OriginId
+		FROM [CustomerEmailTemplateTemp] a where a.[Status] = 'WA' or a.[Status] = 'R'
+		)
+
+UNION ALL
+
+SELECT b.CustomerId
+	,a.Id
+	, null CetId
+	, null CettId
+	,a.Name
+	,a.Subject
+	,a.Content
+	,'true' Activated
+	,CASE 
+		WHEN 1 = 1
+			THEN 'Active'
+		ELSE 'Inactive'
+		END  ActivatedDesc
+	,a.CC
+	,a.Description
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'NA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,a.[Event] EventName
+FROM EmailTemplate a
+JOIN Customer b ON 1 = 1
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+WHERE a.isEdit = 1
+	AND (convert(nvarchar(max), a.Id) + b.CustomerId) NOT IN (
+		SELECT (convert(nvarchar(max), EmailTemplateId) + CustomerId)
+		FROM [CustomerEmailTemplateTemp] where [Status] != 'D'
+		
+		UNION ALL
+		
+		SELECT convert(nvarchar(max), EmailTemplateId) + CustomerId
+		FROM [CustomerEmailTemplate] where [Status] != 'D'
+		)
+
+GO
+/****** Object:  View [dbo].[VW_CustomerEmailTemplateForBank]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+
+
+CREATE VIEW [dbo].[VW_CustomerEmailTemplateForBank]
+AS
+SELECT a.CustomerId
+	,a.CustomerPK BrokerId
+	,cust.Name CustomerName
+	,a.EmailTemplateId Id
+	,a.Name
+	,a.Subject
+	,a.Content
+	,a.CC
+	,a.Description
+	,a.Activated
+	,CASE 
+		WHEN 1 = 1
+			THEN 'Active'
+		ELSE 'Inactive'
+		END  ActivatedDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,et.Event EventName
+FROM CustomerEmailTemplate a
+left join Customer cust on a.CustomerPK = cust.Id
+left join EmailTemplate et on a.EmailTemplateId = et.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+UNION ALL
+
+SELECT b.CustomerId
+	,b.Id BrokerId
+	,b.Name CustomerName
+	,a.Id
+	,a.Name
+	,a.Subject
+	,a.Content
+	,a.CC
+	,a.Description
+	,'true' Activated
+	,CASE 
+		WHEN 1 = 1
+			THEN 'Active'
+		ELSE 'Inactive'
+		END  ActivatedDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'NA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,a.Event EventName
+FROM EmailTemplate a
+JOIN Customer b ON 1 = 1 and b.Subcribed = 1
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+WHERE b.Id != 0 and (convert(nvarchar(max), a.Id) + b.CustomerId) NOT IN (
+		SELECT convert(nvarchar(max), EmailTemplateId) + CustomerId
+		FROM [CustomerEmailTemplate]
+		)
+
+GO
+/****** Object:  View [dbo].[VW_CustomerEmailTemplateIndexApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE VIEW [dbo].[VW_CustomerEmailTemplateIndexApproval]
+AS
+SELECT a.CustomerId
+	,a.EmailTemplateId Id
+	,a.Id CettId
+	,et.Name
+	,et.Subject
+	,et.Content
+	,a.Activated
+	,a.CC
+	,a.Description
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,et.Event EventName
+	,CASE 
+		WHEN a.TempType = 'I'
+			THEN 'New'
+		WHEN a.TempType = 'U'
+			THEN 'Update'
+		WHEN a.TempType = 'D'
+			THEN 'Delete'
+		ELSE 'Undefined'
+		END [RequestType]
+FROM CustomerEmailTemplateTemp a
+LEFT JOIN EmailTemplate et ON a.EmailTemplateId = et.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+GO
+/****** Object:  View [dbo].[VW_CustomerEmailTemplateNew]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+/****** Script for SelectTopNRows command from SSMS  ******/
+CREATE VIEW [dbo].[VW_CustomerEmailTemplateNew]
+AS
+SELECT a.[EmailTemplateId]
+	,a.[Name]
+	,a.[Subject]
+	,a.[Content]
+	,a.[Status]
+	,a.[CreatedAt]
+	,a.[CreatedBy]
+	,a.[ModifiedAt]
+	,a.[ModifiedBy]
+	,a.[isEdit]
+	,a.[Category]
+	,a.[Event]
+	,a.[Description]
+	,a.[CC]
+	,a.[EmailTemplateBrokerId]
+	,a.[BrokerId]
+	,a.BrokerSubscribed
+	,CASE 
+		WHEN a.BrokerSubscribed = 1
+			THEN 'Subscribed'
+		ELSE 'Unsubscribed'
+		END SubsDesc
+	,a.[CustomerEmailTemplateId]
+	,a.Activated
+	,a.ActivatedDesc
+	,CASE 
+		WHEN b.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN b.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN b.STATUS = 'WD'
+			THEN 'Waiting for Deletion'
+		WHEN b.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END TempStatus
+	,b.Id TempId
+FROM (
+	SELECT a.[Id] EmailTemplateId
+		,a.[Name]
+		,a.[Subject]
+		,a.[Content]
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'WA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'D'
+				THEN 'Non Active'
+			ELSE 'Approved'
+			END [Status]
+		,a.[CreatedAt]
+		,c.UserID [CreatedBy]
+		,a.[ModifiedAt]
+		,d.UserID [ModifiedBy]
+		,a.[isEdit]
+		,a.[Category]
+		,a.[Event]
+		,a.[Description]
+		,a.[CC]
+		,convert(VARCHAR(50), a.Id) + '_' + convert(VARCHAR(50), b.Id) EmailTemplateBrokerId
+		,b.Id BrokerId
+		,b.Subcribed BrokerSubscribed
+		,NULL CustomerEmailTemplateId
+		,CONVERT(BIT, 1) Activated
+		,'Active' ActivatedDesc
+	FROM [MORE2_Master].[dbo].[EmailTemplate] a
+	LEFT JOIN Customer b ON 1 = 1
+	LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+	LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+	WHERE convert(VARCHAR(50), a.Id) + '_' + convert(VARCHAR(50), b.Id) NOT IN (
+			SELECT convert(VARCHAR(50), a.EmailTemplateId) + '_' + convert(VARCHAR(50), a.CustomerPK) EmailTempalteBrokerId
+			FROM [MORE2_Master].[dbo].[CustomerEmailTemplate] a
+			)
+	
+	UNION ALL
+	
+	SELECT a.[EmailTemplateId] EmailTemplateId
+		,a.[Name]
+		,a.[Subject]
+		,a.[Content]
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'WA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'D'
+				THEN 'Non Active'
+			ELSE 'Approved'
+			END [Status]
+		,a.[CreatedAt]
+		,c.UserID [CreatedBy]
+		,a.[ModifiedAt]
+		,d.UserID [ModifiedBy]
+		,a.[isEdit]
+		,a.[Category]
+		,a.[EventName]
+		,a.[Description]
+		,a.[CC]
+		,convert(VARCHAR(50), a.EmailTemplateId) + '_' + convert(VARCHAR(50), a.CustomerPK) EmailTemplateBrokerId
+		,a.CustomerPK BrokerId
+		,b.Subcribed BrokerSubscribed
+		,a.Id CustomerEmailTemplateId
+		,a.Activated Activated
+		,CASE 
+			WHEN a.Activated = 'true'
+				THEN 'Active'
+			ELSE 'Inactive'
+			END ActivatedDesc
+	FROM [MORE2_Master].[dbo].[CustomerEmailTemplate] a
+	LEFT JOIN Customer b ON a.CustomerPK = b.Id
+	LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+	LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+	) a
+LEFT JOIN CustomerEmailTemplateTemp b ON a.EmailTemplateId = b.EmailTemplateId
+	AND (
+		b.[Status] = 'WA'
+		OR b.[Status] = 'WD'
+		OR b.[Status] = 'RV'
+		)
+	AND a.BrokerId = b.CustomerPK
+
+GO
+/****** Object:  View [dbo].[VW_CustomerEmailTemplateTemp]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+--select * from [dbo].[VW_CustomerEmailTemplateTemp]
+
+
+
+CREATE VIEW [dbo].[VW_CustomerEmailTemplateTemp]
+AS
+SELECT a.CustomerId
+	,a.Id Id
+	,a.Name
+	,a.Subject
+	,a.Content
+	,a.CC
+	,a.Description
+	,a.Activated
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		ELSE 'Approved'
+		END [Status]
+	,a.CreatedAt
+	,c.UserID CreatedBy
+	,a.ModifiedAt
+	,d.UserID ModifiedBy
+	,a.isEdit
+	,a.Category
+	,'Event Name' EventName
+FROM CustomerEmailTemplateTemp a
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+
+GO
+/****** Object:  View [dbo].[VW_CustomerIndexApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+CREATE VIEW [dbo].[VW_CustomerIndexApproval]
+AS
+SELECT b.Id
+	,a.id IdCustomerTemp
+	,a.CustomerId
+	,a.Enabled
+	,a.Subscribed
+	,a.Name CustomerName
+	,e.ID IdInsdustry
+	,e.Name IndustryName
+	,a.Phone
+	,a.Address
+	,a.Country + ' - ' + country.Name Country
+	,a.City
+	,a.TransactionType
+	,a.SettlementType
+	,CASE 
+		WHEN a.Enabled = 'true'
+			THEN 'Enabled'
+		WHEN a.Enabled = 'false'
+			THEN 'Disabled'
+		END EnableStatus
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Need Revision'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		WHEN a.STATUS = 'R'
+			THEN 'Rejected'
+		ELSE 'Undefined'
+		END [Status]
+	,CASE 
+		WHEN a.TempType = 'I'
+			THEN 'New'
+		WHEN a.TempType = 'U'
+			THEN 'Update'
+		WHEN a.TempType = 'D'
+			THEN 'Delete'
+		ELSE 'Undefined'
+		END [RequestType],
+	c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM CustomerTemp a
+LEFT JOIN Customer b ON a.brokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Industry e ON a.IndustryID = e.ID
+LEFT JOIN Country ON a.Country = Country.Alpha2
+
+GO
+/****** Object:  View [dbo].[VW_SystemParameter]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE VIEW [dbo].[VW_SystemParameter]
+AS
+SELECT ROW_NUMBER() OVER (ORDER BY ModifiedAt
+		) ROWID, T.*
+FROM (
+	SELECT SP.[Id]
+		,SP.[Name]
+		,SP.[Value] OldValue
+		,SP.[Value] Value
+		,SP.[Unit]
+		,SP.[Status]
+		,CASE 
+			WHEN SP.[Status2] = 'A' THEN 'Active'
+			WHEN SP.[Status2] = 'WA' THEN 'Waiting for Approval'
+			ELSE 'Inactive'
+		END Status2
+		,UC.UserID CreatedBy
+		,SP.CreatedAt
+		,UM.UserID ModifiedBy
+		,SP.ModifiedAt
+	FROM SystemParameter SP
+	LEFT JOIN AspNetUsers UC ON SP.CreatedBy = UC.Id
+	LEFT JOIN AspNetUsers UM ON SP.ModifiedBy = UM.Id
+	
+	UNION
+	
+	SELECT SPT.[Id]
+		,SPT.[Name]
+		,SP.[Value] OldValue
+		,SPT.[Value] Value
+		,SPT.[Unit]
+		,SPT.[Status]
+		,CASE 
+			WHEN SPT.[Status2] = 'A' THEN 'Active'
+			WHEN SPT.[Status2] = 'WA' THEN 'Waiting for Approval'
+			ELSE 'Inactive'
+		END Status2
+		,UC.UserID CreatedBy
+		,SP.CreatedAt
+		,UM.UserID ModifiedBy
+		,SP.ModifiedAt
+	FROM SystemParameterTemp SPT
+	INNER JOIN SystemParameter SP ON SPT.SystemParameterId = SP.Id
+	LEFT JOIN AspNetUsers UC ON SPT.CreatedBy = UC.Id
+	LEFT JOIN AspNetUsers UM ON SPT.ModifiedBy = UM.Id
+	) T
+
+GO
+/****** Object:  View [dbo].[VW_Tolerance]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE VIEW [dbo].[VW_Tolerance]
+AS
+SELECT a.Id
+	,tt.Id TempId
+	,a.brokerId
+	,b.CustomerId
+	,b.Name CustomerName
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value
+	,CASE 
+		WHEN a.Value != 0
+			THEN CONVERT(NVARCHAR(50), a.Value)
+		ELSE '-'
+		END ValueDesc
+	,a.Percentage
+	,CASE 
+		WHEN a.Percentage != 0
+			THEN CONVERT(NVARCHAR(50), a.Percentage)
+		ELSE '-'
+		END PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM Tolerance a
+LEFT JOIN ToleranceTemp tt ON a.Id = tt.ToleranceId
+	AND (
+		tt.[Status] = 'WA'
+		OR tt.[Status] = 'WD'
+		OR tt.[Status] = 'RV'
+		)
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+WHERE a.[Status] = 'A'
+GO
+/****** Object:  View [dbo].[VW_ToleranceClient]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[VW_ToleranceClient]
+AS
+SELECT a.Id
+	,tt.Id TempId
+	,a.brokerId
+	,b.CustomerId
+	,b.Name CustomerName
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,f.Id ClientId
+	,f.ClientCd ClientCode
+	,f.ClientName ClientName
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value
+	,CASE 
+		WHEN a.Value != 0
+			THEN CONVERT(NVARCHAR(50), a.Value)
+		ELSE '-'
+		END ValueDesc
+	,a.Percentage
+	,CASE 
+		WHEN a.Percentage != 0
+			THEN CONVERT(NVARCHAR(50), a.Percentage)
+		ELSE '-'
+		END PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM ToleranceClient a
+LEFT JOIN ToleranceClientTemp tt ON a.Id = tt.OriginId
+	AND (
+		tt.[Status] = 'WA'
+		OR tt.[Status] = 'WD'
+		OR tt.[Status] = 'RV'
+		)
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+LEFT JOIN ARCounterpart f ON a.ClientPK = f.Id
+WHERE a.[Status] = 'A'
+GO
+/****** Object:  View [dbo].[VW_ToleranceClientForBank]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE VIEW [dbo].[VW_ToleranceClientForBank]
+AS
+SELECT a.Id
+	,a.brokerId
+	,b.CustomerId
+	,b.Name CustomerName
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,f.Id ClientId
+	,f.ClientCd ClientCode
+	,f.ClientName ClientName
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value
+	,CONVERT(NVARCHAR(50), a.Value) ValueDesc
+	,a.Percentage
+	,CONVERT(NVARCHAR(50), a.Percentage) PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+	,tt.Id TempId
+	,CASE 
+		WHEN tt.STATUS IS NULL
+			THEN NULL
+		WHEN tt.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN tt.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN tt.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN tt.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN tt.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [TempStatus]
+FROM ToleranceClient a
+LEFT JOIN ToleranceClientTemp tt ON a.Id = tt.OriginId
+	AND (
+		tt.[Status] = 'WA'
+		OR tt.[Status] = 'WD'
+		OR tt.[Status] = 'RV'
+		)
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+LEFT JOIN ARCounterpart f ON a.ClientPK = f.Id
+
+GO
+/****** Object:  View [dbo].[VW_ToleranceClientIndexApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[VW_ToleranceClientIndexApproval]
+AS
+SELECT a.Id
+	,a.OriginId
+	,a.brokerId
+	,b.CustomerId
+	,b.Name CustomerName
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,f.Id ClientId
+	,f.ClientCd ClientCode
+	,f.ClientName ClientName
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value
+	,CASE 
+		WHEN a.Value != 0
+			THEN CONVERT(NVARCHAR(50), a.Value)
+		ELSE '-'
+		END ValueDesc
+	,a.Percentage
+	,CASE 
+		WHEN a.Percentage != 0
+			THEN CONVERT(NVARCHAR(50), a.Percentage)
+		ELSE '-'
+		END PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WD'
+			THEN 'Waiting for Deletion'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Need to Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,CASE 
+		WHEN a.TempType = 'I'
+			THEN 'New'
+		WHEN a.TempType = 'U'
+			THEN 'Update'
+		WHEN a.TempType = 'D'
+			THEN 'Delete'
+		ELSE 'Undefined'
+		END [RequestType]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM ToleranceClientTemp a
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+LEFT JOIN ARCounterpart f ON a.ClientPK = f.Id
+GO
+/****** Object:  View [dbo].[VW_ToleranceClientUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[VW_ToleranceClientUpload]
+AS
+SELECT a.[Id]
+      ,a.[ClientCode]
+      ,b.[ClientName]
+      ,a.[CurrencyCode]
+      ,a.[Value]
+      ,a.[Percentage]
+      ,a.[DefaultValue]
+      ,a.[Status]
+      ,a.[CreatedAt]
+      ,a.[CreatedBy]
+      ,a.[ModifiedAt]
+      ,a.[ModifiedBy]
+      ,a.[BrokerId]
+      ,a.[PBulkId]
+      ,a.[IsExisting]
+      ,a.[ErrorMessage]
+FROM ToleranceClientUpload a
+left join ARCounterpart b on a.ClientCode = b.ClientCd
+
+GO
+/****** Object:  View [dbo].[VW_ToleranceForBank]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW [dbo].[VW_ToleranceForBank]
+AS
+SELECT a.Id
+	,a.brokerId
+	,b.CustomerId
+	,b.Name CustomerName
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value
+	,CASE 
+		WHEN a.Value != 0
+			THEN CONVERT(NVARCHAR(50), a.Value)
+		ELSE '-'
+		END ValueDesc
+	,a.Percentage
+	,CASE 
+		WHEN a.Percentage != 0
+			THEN CONVERT(NVARCHAR(50), a.Percentage)
+		ELSE '-'
+		END PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+	,tt.Id TempId
+	,CASE 
+		WHEN tt.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN tt.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN tt.STATUS = 'RV'
+			THEN 'Revised'
+		WHEN tt.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [TempStatus]
+FROM Tolerance a
+LEFT JOIN ToleranceTemp tt ON a.Id = tt.ToleranceId
+	AND (
+		tt.[Status] = 'WA'
+		OR tt.[Status] = 'WD'
+		OR tt.[Status] = 'RV'
+		)
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+WHERE A.STATUS = 'A'
+
+GO
+/****** Object:  View [dbo].[VW_ToleranceIndexApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[VW_ToleranceIndexApproval]
+AS
+SELECT a.Id
+	,a.ToleranceId
+	,a.brokerId
+	,b.CustomerId
+	,a.DefaultValue
+	,clv.TEXT DefaultValueDesc
+	,a.CurrencyCode + ' - ' + e.Name AS CurrencyCode
+	,a.Value,
+	CASE 
+		WHEN a.Value != 0
+			THEN CONVERT(NVARCHAR(50), a.Value)
+		ELSE '-'
+		END ValueDesc
+	,a.Percentage
+	,CASE 
+		WHEN a.Percentage != 0
+			THEN CONVERT(NVARCHAR(50), a.Percentage)
+		ELSE '-'
+		END PercentageDesc
+	,CASE 
+		WHEN a.STATUS = 'DR'
+			THEN 'Draft'
+		WHEN a.STATUS = 'WA'
+			THEN 'Waiting for Approval'
+		WHEN a.STATUS = 'WD'
+			THEN 'Waiting for Deletion'
+		WHEN a.STATUS = 'D'
+			THEN 'Non Active'
+		WHEN a.STATUS = 'RV'
+			THEN 'Need to Revise'
+		WHEN a.STATUS = 'A'
+			THEN 'Approved'
+		ELSE 'Undefined'
+		END [Status]
+	,CASE 
+		WHEN a.TempType = 'I'
+			THEN 'New'
+		WHEN a.TempType = 'U'
+			THEN 'Update'
+		WHEN a.TempType = 'D'
+			THEN 'Delete'
+		ELSE 'Undefined'
+		END [RequestType]
+	,c.UserID CreatedBy
+	,a.CreatedAt
+	,d.UserID ModifiedBy
+	,a.ModifiedAt
+FROM ToleranceTemp a
+LEFT JOIN CommonListValue clv ON a.DefaultValue = clv.Value
+	AND clv.ParentId = (
+		SELECT TOP (1) id
+		FROM CommonListValue
+		WHERE Value = 'Tolerance Data Management - Defaul Value'
+		)
+LEFT JOIN Customer b ON a.BrokerId = b.Id
+LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+LEFT JOIN Currency e ON a.CurrencyCode = e.Code
+
+GO
+/****** Object:  View [dbo].[VW_ToleranceUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[VW_ToleranceUpload]
+AS
+SELECT [Id]
+      ,[CurrencyCode]
+      ,[Value]
+      ,[Percentage]
+      ,[DefaultValue]
+      ,[Status]
+      ,[CreatedAt]
+      ,[CreatedBy]
+      ,[ModifiedAt]
+      ,[ModifiedBy]
+      ,[BrokerId]
+      ,[PBulkId]
+      ,[IsExisting]
+      ,[ErrorMessage]
+FROM ToleranceUpload a
+
+GO
+/****** Object:  View [dbo].[VW_VirtualAccount]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW [dbo].[VW_VirtualAccount]
+AS
+SELECT ROW_NUMBER() OVER (
+		ORDER BY getdate()
+		) ROWID
+	,z.*
+FROM (
+	SELECT A.Id VAId
+		,a.ClientPK ClientId
+		,b.ClientName ClientName
+		,a.Bin
+		,a.Code VANumber
+		,a.CurrencyCode + ' - ' + f.Name Currency
+		,a.CurrencyCode
+		,a.Bin + a.Code BinVANumber
+		,a.AccountNumber RealAccount
+		,a.Balanced Balance
+		,e.Name CustomerName
+		,e.CustomerId
+		,e.Id BrokerId
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'WA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'NA'
+				THEN 'Non Active'
+			WHEN a.STATUS = 'RV'
+				THEN 'Revised'
+			WHEN a.STATUS = 'A'
+				THEN 'Approved'
+			ELSE 'Undefined'
+			END [Status]
+		,c.UserID CreatedBy
+		,d.UserID ModifiedBy
+		,a.CreatedAt
+		,a.ModifiedAt
+	FROM VirtualAccount a
+	LEFT JOIN ARCounterpart b ON a.ClientPK = b.Id
+	LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+	LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+	LEFT JOIN Customer e ON a.BrokerId = e.Id
+	LEFT JOIN Currency f ON a.CurrencyCode = f.Code
+	WHERE a.[Status] = 'A'
+		AND a.Id NOT IN (
+			SELECT VirtualAccountId
+			FROM VirtualAccountTemp
+			WHERE VirtualAccountId IS NOT NULL
+				AND (
+					STATUS = 'WA'
+					OR STATUS = 'RV'
+					OR STATUS = 'WD'
+					)
+			)
+	
+	UNION ALL
+	
+	SELECT A.VirtualAccountId VAId
+		,a.ClientPKMaster ClientId
+		,b.ClientName ClientName
+		,ab.Bin
+		,ab.Code VANumber
+		,ab.CurrencyCode + ' - ' + f.Name Currency
+		,ab.CurrencyCode
+		,a.Bin + a.Code BinVANumber
+		,a.AccountNumber RealAccount
+		,ab.Balanced Balance
+		,e.Name CustomerName
+		,e.CustomerId
+		,e.Id BrokerId
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'WA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'WD'
+				THEN 'Waiting for Deletion'
+			WHEN a.STATUS = 'NA'
+				THEN 'Non Active'
+			WHEN a.STATUS = 'RV'
+				THEN 'Revised'
+			WHEN a.STATUS = 'A'
+				THEN 'Approved'
+			ELSE 'Undefined'
+			END [Status]
+		,c.UserID CreatedBy
+		,d.UserID ModifiedBy
+		,ab.CreatedAt
+		,ab.ModifiedAt
+	FROM VirtualAccountTemp a
+	JOIN VirtualAccount ab ON a.VirtualAccountId = ab.Id
+		AND a.ClientPKMaster IS NOT NULL
+	LEFT JOIN ARCounterpart b ON a.ClientPKMaster = b.Id
+	LEFT JOIN AspNetUsers c ON ab.CreatedBy = c.Id
+	LEFT JOIN AspNetUsers d ON ab.ModifiedBy = d.Id
+	LEFT JOIN Customer e ON a.BrokerId = e.Id
+	LEFT JOIN Currency f ON a.CurrencyCode = f.Code
+	WHERE a.STATUS = 'WA'
+		OR a.STATUS = 'RV'
+		OR a.STATUS = 'WD'
+	) z
+GO
+/****** Object:  View [dbo].[VW_VirtualAccountIndexApproval]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+CREATE VIEW [dbo].[VW_VirtualAccountIndexApproval]
+AS
+SELECT ROW_NUMBER() OVER (
+		ORDER BY getdate()
+		) ROWID
+	,z.*
+FROM (
+	SELECT A.Id VAId
+		,a.ClientPKMaster ClientId
+		,b.ClientName ClientName
+		,a.Bin
+		,a.AccountNumber RealAccount
+		,a.Code VANumber
+		,CASE 
+			WHEN a.TempType = 'I'
+				THEN 'New'
+			WHEN a.TempType = 'U'
+				THEN 'Update'
+			WHEN a.TempType = 'D'
+				THEN 'Delete'
+			ELSE 'Undefined'
+			END [Type]
+		,a.CurrencyCode + ' - ' + f.Name Currency
+		,a.CurrencyCode
+		,a.Bin + a.Code BinVANumber
+		,a.Balanced Balance
+		,e.Name CustomerName
+		,e.CustomerId
+		,e.Id BrokerId
+		,CASE 
+			WHEN a.STATUS = 'DR'
+				THEN 'Draft'
+			WHEN a.STATUS = 'WA'
+				THEN 'Waiting for Approval'
+			WHEN a.STATUS = 'WD'
+				THEN 'Waiting for Deletion'
+			WHEN a.STATUS = 'D'
+				THEN 'Non Active'
+			WHEN a.STATUS = 'RV'
+				THEN 'Need Revision'
+			WHEN a.STATUS = 'R'
+				THEN 'Rejected'
+			WHEN a.STATUS = 'A'
+				THEN 'Approved'
+			ELSE 'Undefined'
+			END [Status]
+		,c.UserID CreatedBy
+		,d.UserID ModifiedBy
+		,a.CreatedAt
+		,a.ModifiedAt
+	FROM VirtualAccountTemp a
+	--JOIN VirtualAccount ab ON a.VirtualAccountId = ab.Id
+	LEFT JOIN ARCounterpart b ON a.ClientPKMaster = b.Id
+	LEFT JOIN AspNetUsers c ON a.CreatedBy = c.Id
+	LEFT JOIN AspNetUsers d ON a.ModifiedBy = d.Id
+	LEFT JOIN Customer e ON a.BrokerId = e.Id
+	LEFT JOIN Currency f ON a.CurrencyCode = f.Code
+	WHERE a.ClientPKMaster IS NOT NULL
+		--AND (
+		--	a.STATUS = 'WA'
+		--	OR a.STATUS = 'RV'
+		--	OR a.STATUS = 'WD'
+		--	)
+	) z
+GO
+/****** Object:  View [dbo].[VW_VirtualAccountUpload]    Script Date: 19/04/2021 11:49:27 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE VIEW [dbo].[VW_VirtualAccountUpload]
+AS
+SELECT 
+	 a.[Id]
+	,a.[VirtualAccountId]
+	,a.[TempType]
+	,a.[Code]
+	,a.[CurrencyCode]
+	,a.[CustomerBinId]
+	,a.[CustomerBinTempId]
+	,a.[AccountNumber]
+	,a.[Bin]
+	,a.[ClientNumber]
+	,b.ClientName
+	,a.[ClientPK]
+	,a.[ClientPKMaster]
+	,a.[Comment]
+	,a.[StatusData]
+	,a.[Status]
+	,a.[CreatedAt]
+	,a.[CreatedBy]
+	,a.[ModifiedAt]
+	,a.[ModifiedBy]
+	,a.[Balanced]
+	,a.[BrokerId]
+	,a.[ErrorMessage]
+	,a.[PBulkId]
+	,a.[IsExisting]
+FROM [MORE2_Master].[dbo].[VirtualAccountUpload] a
+left join ARCounterpart b on a.ClientNumber = b.ClientCd
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [RoleNameIndex]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE UNIQUE NONCLUSTERED INDEX [RoleNameIndex] ON [dbo].[AspNetRoles]
+(
+	[Name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [IX_UserId]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE NONCLUSTERED INDEX [IX_UserId] ON [dbo].[AspNetUserClaims]
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [IX_UserId]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE NONCLUSTERED INDEX [IX_UserId] ON [dbo].[AspNetUserLogins]
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [IX_RoleId]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE NONCLUSTERED INDEX [IX_RoleId] ON [dbo].[AspNetUserRoles]
+(
+	[RoleId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [IX_UserId]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE NONCLUSTERED INDEX [IX_UserId] ON [dbo].[AspNetUserRoles]
+(
+	[UserId] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+SET ANSI_PADDING ON
+
+GO
+/****** Object:  Index [UserNameIndex]    Script Date: 19/04/2021 11:49:27 ******/
+CREATE UNIQUE NONCLUSTERED INDEX [UserNameIndex] ON [dbo].[AspNetUsers]
+(
+	[UserName] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+GO
+ALTER TABLE [dbo].[APCounterpart_MapField] ADD  CONSTRAINT [DF_APCounterpart_MapField_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[APCounterpart_MapFieldTemp] ADD  CONSTRAINT [DF_APCounterpart_MapFieldTemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[APCounterpart_UpdateField] ADD  CONSTRAINT [DF_APCounterpart_UpdateField_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[APCounterpart_UpdateFieldTemp] ADD  CONSTRAINT [DF_APCounterpart_UpdateFieldTemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[APCounterpart_User] ADD  CONSTRAINT [DF_APCounterpart_User_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[APCounterpart_UserTemp] ADD  CONSTRAINT [DF_APCounterpart_UserTemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterpart] ADD  CONSTRAINT [DF_ARCounterpart_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterpart_MapField] ADD  CONSTRAINT [DF_ARCounterpart_MapField_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterpart_MapFieldTemp] ADD  CONSTRAINT [DF_ARCounterpart_MapFieldTemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterpart_UpdateField] ADD  CONSTRAINT [DF_ARCounterpart_UpdateField_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterpart_UpdateFieldTemp] ADD  CONSTRAINT [DF_ARCounterpart_UpdateFieldTemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterPart_VA] ADD  CONSTRAINT [DF_ARCounterPart_VA_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ARCounterPart_VATemp] ADD  CONSTRAINT [DF_ARCounterPart_VATemp_Id]  DEFAULT (newid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Client_] ADD  CONSTRAINT [DF__Client__Id__640DD89F]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Client_] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[Client_] ADD  DEFAULT ((0)) FOR [IsInsurance]
+GO
+ALTER TABLE [dbo].[Client_] ADD  DEFAULT ('00000000-0000-0000-0000-000000000000') FOR [InsuranceId]
+GO
+ALTER TABLE [dbo].[ClientTemp_] ADD  CONSTRAINT [DF__ClientTemp__Id__66EA454A]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ClientTemp_] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[ClientTemp_] ADD  DEFAULT ((0)) FOR [IsInsurance]
+GO
+ALTER TABLE [dbo].[ClientTemp_] ADD  DEFAULT ('00000000-0000-0000-0000-000000000000') FOR [InsuranceId]
+GO
+ALTER TABLE [dbo].[ClientVA] ADD  CONSTRAINT [DF__ClientVA__Id__69C6B1F5]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ClientVATemp] ADD  CONSTRAINT [DF__ClientVATemp__Id__6CA31EA0]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ClientVATemp] ADD  CONSTRAINT [DF__ClientVAT__Statu__6B79F03D]  DEFAULT ('') FOR [Status]
+GO
+ALTER TABLE [dbo].[Customer] ADD  DEFAULT ((1)) FOR [Enabled]
+GO
+ALTER TABLE [dbo].[Customer] ADD  DEFAULT ((1)) FOR [Subcribed]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF__Customer__Websit__318258D2]  DEFAULT ('') FOR [Website]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF__Customer__State__32767D0B]  DEFAULT ('') FOR [State]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF__Customer__Countr__336AA144]  DEFAULT ('') FOR [Country]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF__Customer__City__345EC57D]  DEFAULT ('') FOR [City]
+GO
+ALTER TABLE [dbo].[Customer] ADD  CONSTRAINT [DF__Customer__Custom__3552E9B6]  DEFAULT ('') FOR [CustomerId]
+GO
+ALTER TABLE [dbo].[CustomerBin] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerBin] ADD  DEFAULT ('') FOR [AccountNumber]
+GO
+ALTER TABLE [dbo].[CustomerBinTemp] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] ADD  DEFAULT (newsequentialid()) FOR [EmailTemplateId]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] ADD  DEFAULT ('true') FOR [Activated]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] ADD  DEFAULT (newsequentialid()) FOR [OriginId]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] ADD  DEFAULT ((1)) FOR [CustomerPK]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] ADD  DEFAULT ('true') FOR [Activated]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  DEFAULT ((1)) FOR [Enabled]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  DEFAULT ((1)) FOR [Subscribed]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  CONSTRAINT [DF__CustomerTemp__Websit__318258D2]  DEFAULT ('') FOR [Website]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  CONSTRAINT [DF__CustomerTemp__State__32767D0B]  DEFAULT ('') FOR [State]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  CONSTRAINT [DF__CustomerTemp__Countr__336AA144]  DEFAULT ('') FOR [Country]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  CONSTRAINT [DF__CustomerTemp__City__345EC57D]  DEFAULT ('') FOR [City]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  CONSTRAINT [DF__CustomerTemp__Custom__3552E9B6]  DEFAULT ('') FOR [CustomerId]
+GO
+ALTER TABLE [dbo].[CustomerTemp] ADD  DEFAULT ((1)) FOR [UseOldData]
+GO
+ALTER TABLE [dbo].[CustomerUser] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerUserTemp] ADD  CONSTRAINT [DF__CustomerUser__Id__0E391C95]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[CustomerUserTemp] ADD  CONSTRAINT [DF_CustomerUserTemp_TempStatus]  DEFAULT (N'WA') FOR [TempStatus]
+GO
+ALTER TABLE [dbo].[EmailTemplate] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[EmailTemplate] ADD  DEFAULT ('EventName') FOR [Event]
+GO
+ALTER TABLE [dbo].[EmailTemplateTemp] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[EmailTemplateTemp] ADD  DEFAULT ('EventName') FOR [Event]
+GO
+ALTER TABLE [dbo].[GroupProfile] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[GroupProfileTemp] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  CONSTRAINT [DF__Insurance__Id__2022C2A6]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  CONSTRAINT [DF__Insurance__Insur__119F9925]  DEFAULT ('') FOR [InsurerCode]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [AccountNumber]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [BankName]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [BankBranch]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [BankAddress]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ((0)) FOR [RTGS]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ((0)) FOR [ResidentStatus]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [CitizenshipCode]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ('') FOR [RelationShipCode]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ((0)) FOR [EnableDirectbilling]
+GO
+ALTER TABLE [dbo].[Insurance] ADD  DEFAULT ((0)) FOR [EnableAccessToMore]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  CONSTRAINT [DF__InsuranceTem__Id__22FF2F51]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  CONSTRAINT [DF__Insurance__Branc__1293BD5E]  DEFAULT ('') FOR [BranchLocCode]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  CONSTRAINT [DF__Insurance__Insur__1387E197]  DEFAULT ('') FOR [InsurerCode]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  CONSTRAINT [DF__Insurance__Insur__147C05D0]  DEFAULT ('') FOR [InsurerBranch]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [AccountNumber]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [BankName]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [BankBranch]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [BankAddress]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ((0)) FOR [RTGS]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ((0)) FOR [ResidentStatus]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [CitizenshipCode]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ('') FOR [RelationShipCode]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ((0)) FOR [EnableDirectbilling]
+GO
+ALTER TABLE [dbo].[InsuranceTemp] ADD  DEFAULT ((0)) FOR [EnableAccessToMore]
+GO
+ALTER TABLE [dbo].[MasterReportAuditrail] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[MasterReportAuditrail] ADD  DEFAULT ('') FOR [Background]
+GO
+ALTER TABLE [dbo].[Notification] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Profile] ADD  CONSTRAINT [DF_T_Account_RoleId]  DEFAULT (newsequentialid()) FOR [RoleId]
+GO
+ALTER TABLE [dbo].[ProfileMember] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ProfileMemberTemp] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[ProfileMemberTemp] ADD  DEFAULT ('') FOR [TempType]
+GO
+ALTER TABLE [dbo].[SystemParameter] ADD  CONSTRAINT [DF__SystemParame__Id__5F7E2DAC]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[SystemParameterTemp] ADD  CONSTRAINT [DF__SystemParame__Id__6166761E]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[Tolerance] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[ToleranceClient] ADD  DEFAULT ('491ee875-fbd2-4dea-b1de-2f147eb7f177') FOR [ClientPK]
+GO
+ALTER TABLE [dbo].[ToleranceClient] ADD  DEFAULT ((0)) FOR [Percentage]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] ADD  DEFAULT ('491ee875-fbd2-4dea-b1de-2f147eb7f177') FOR [ClientPK]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] ADD  DEFAULT ((0)) FOR [Percentage]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[ToleranceClientUpload] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[ToleranceTemp] ADD  DEFAULT ((0)) FOR [Percentage]
+GO
+ALTER TABLE [dbo].[ToleranceTemp] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[ToleranceUpload] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[UserLogin] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[UserLogin] ADD  CONSTRAINT [DF_UserLogin_OtpEntered]  DEFAULT ((0)) FOR [OtpEntered]
+GO
+ALTER TABLE [dbo].[UserLoginHistory] ADD  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  CONSTRAINT [DF__VirtualAccou__Id__3AD6B8E2]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  DEFAULT ('') FOR [AccountNumber]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  CONSTRAINT [DF__VirtualAc__Clien__37C5420D]  DEFAULT ('') FOR [ClientNumber]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  DEFAULT ('491ee875-fbd2-4dea-b1de-2f147eb7f177') FOR [ClientPK]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  DEFAULT ((0)) FOR [Balanced]
+GO
+ALTER TABLE [dbo].[VirtualAccount] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] ADD  CONSTRAINT [DF__VirtualAccou__Id__3DB3258D]  DEFAULT (newsequentialid()) FOR [Id]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] ADD  DEFAULT ('') FOR [AccountNumber]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] ADD  CONSTRAINT [DF__VirtualAc__Clien__38B96646]  DEFAULT ('') FOR [ClientNumber]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] ADD  DEFAULT ((0)) FOR [Balanced]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[VirtualAccountUpload] ADD  DEFAULT ((0)) FOR [Balanced]
+GO
+ALTER TABLE [dbo].[VirtualAccountUpload] ADD  DEFAULT ((0)) FOR [BrokerId]
+GO
+ALTER TABLE [dbo].[AspNetUserClaims]  WITH CHECK ADD  CONSTRAINT [ FK_dbo.AspNetUserClaims_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+GO
+ALTER TABLE [dbo].[AspNetUserClaims] CHECK CONSTRAINT [ FK_dbo.AspNetUserClaims_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[AspNetUserClaims]  WITH CHECK ADD  CONSTRAINT [FK_dbo.AspNetUserClaims_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[AspNetUserClaims] CHECK CONSTRAINT [FK_dbo.AspNetUserClaims_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[AspNetUserLogins]  WITH CHECK ADD  CONSTRAINT [ FK_dbo.AspNetUserLogins_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+GO
+ALTER TABLE [dbo].[AspNetUserLogins] CHECK CONSTRAINT [ FK_dbo.AspNetUserLogins_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[AspNetUserLogins]  WITH CHECK ADD  CONSTRAINT [FK_dbo.AspNetUserLogins_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[AspNetUserLogins] CHECK CONSTRAINT [FK_dbo.AspNetUserLogins_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[AspNetUserRoles]  WITH CHECK ADD  CONSTRAINT [ FK_dbo.AspNetUserRoles_dbo.AspNetRoles_RoleId] FOREIGN KEY([RoleId])
+REFERENCES [dbo].[AspNetRoles] ([Id])
+GO
+ALTER TABLE [dbo].[AspNetUserRoles] CHECK CONSTRAINT [ FK_dbo.AspNetUserRoles_dbo.AspNetRoles_RoleId]
+GO
+ALTER TABLE [dbo].[AspNetUserRoles]  WITH CHECK ADD  CONSTRAINT [ FK_dbo.AspNetUserRoles_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+GO
+ALTER TABLE [dbo].[AspNetUserRoles] CHECK CONSTRAINT [ FK_dbo.AspNetUserRoles_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[AspNetUserRoles]  WITH CHECK ADD  CONSTRAINT [FK_dbo.AspNetUserRoles_dbo.AspNetRoles_RoleId] FOREIGN KEY([RoleId])
+REFERENCES [dbo].[AspNetRoles] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[AspNetUserRoles] CHECK CONSTRAINT [FK_dbo.AspNetUserRoles_dbo.AspNetRoles_RoleId]
+GO
+ALTER TABLE [dbo].[AspNetUserRoles]  WITH CHECK ADD  CONSTRAINT [FK_dbo.AspNetUserRoles_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[AspNetUserRoles] CHECK CONSTRAINT [FK_dbo.AspNetUserRoles_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[BulkUploadHistory]  WITH CHECK ADD  CONSTRAINT [FK_BulkUploadHistory_ToBulkUpload] FOREIGN KEY([BulkUploadId])
+REFERENCES [dbo].[BulkUpload] ([Id])
+GO
+ALTER TABLE [dbo].[BulkUploadHistory] CHECK CONSTRAINT [FK_BulkUploadHistory_ToBulkUpload]
+GO
+ALTER TABLE [dbo].[Client_]  WITH CHECK ADD  CONSTRAINT [FK_Client_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[Client_] CHECK CONSTRAINT [FK_Client_ToCustomer]
+GO
+ALTER TABLE [dbo].[CommonListValue]  WITH CHECK ADD  CONSTRAINT [FK_CommonListValue_ToCLV] FOREIGN KEY([ParentId])
+REFERENCES [dbo].[CommonListValue] ([Id])
+GO
+ALTER TABLE [dbo].[CommonListValue] CHECK CONSTRAINT [FK_CommonListValue_ToCLV]
+GO
+ALTER TABLE [dbo].[Customer]  WITH CHECK ADD  CONSTRAINT [FK_Customer_ToIndustry] FOREIGN KEY([IndustryID])
+REFERENCES [dbo].[Industry] ([ID])
+GO
+ALTER TABLE [dbo].[Customer] CHECK CONSTRAINT [FK_Customer_ToIndustry]
+GO
+ALTER TABLE [dbo].[CustomerAccount]  WITH CHECK ADD  CONSTRAINT [FK_CustomerAccount_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerAccount] CHECK CONSTRAINT [FK_CustomerAccount_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerAccountTemp_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerAccountTemp] CHECK CONSTRAINT [FK_CustomerAccountTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerAccountTemp_ToCustomerTemp] FOREIGN KEY([CustomerTempPK])
+REFERENCES [dbo].[CustomerTemp] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerAccountTemp] CHECK CONSTRAINT [FK_CustomerAccountTemp_ToCustomerTemp]
+GO
+ALTER TABLE [dbo].[CustomerBin]  WITH CHECK ADD  CONSTRAINT [FK_CustomerBin_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerBin] CHECK CONSTRAINT [FK_CustomerBin_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerBinTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerBinTemp_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerBinTemp] CHECK CONSTRAINT [FK_CustomerBinTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerBinTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerBinTemp_ToCustomerBin] FOREIGN KEY([OriginId])
+REFERENCES [dbo].[CustomerBin] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerBinTemp] CHECK CONSTRAINT [FK_CustomerBinTemp_ToCustomerBin]
+GO
+ALTER TABLE [dbo].[CustomerBinTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerBinTemp_ToCustomerTemp] FOREIGN KEY([CustomerTempPK])
+REFERENCES [dbo].[CustomerTemp] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerBinTemp] CHECK CONSTRAINT [FK_CustomerBinTemp_ToCustomerTemp]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplate_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] CHECK CONSTRAINT [FK_CustomerEmailTemplate_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplate_ToEmailTemplate] FOREIGN KEY([EmailTemplateId])
+REFERENCES [dbo].[EmailTemplate] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] CHECK CONSTRAINT [FK_CustomerEmailTemplate_ToEmailTemplate]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplate_ToMailCategory] FOREIGN KEY([Category])
+REFERENCES [dbo].[EmailCategory] ([ID])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplate] CHECK CONSTRAINT [FK_CustomerEmailTemplate_ToMailCategory]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplateTemp_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] CHECK CONSTRAINT [FK_CustomerEmailTemplateTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplateTemp_ToEmailTemplate] FOREIGN KEY([EmailTemplateId])
+REFERENCES [dbo].[EmailTemplate] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] CHECK CONSTRAINT [FK_CustomerEmailTemplateTemp_ToEmailTemplate]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplateTemp_ToMailCategory] FOREIGN KEY([Category])
+REFERENCES [dbo].[EmailCategory] ([ID])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] CHECK CONSTRAINT [FK_CustomerEmailTemplateTemp_ToMailCategory]
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_CustomerEmailTemplateTemp_ToOrigin] FOREIGN KEY([OriginId])
+REFERENCES [dbo].[CustomerEmailTemplate] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerEmailTemplateTemp] CHECK CONSTRAINT [FK_CustomerEmailTemplateTemp_ToOrigin]
+GO
+ALTER TABLE [dbo].[CustomerTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerTemp_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[CustomerTemp] CHECK CONSTRAINT [FK_CustomerTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[CustomerTemp]  WITH CHECK ADD  CONSTRAINT [FK_CustomerTemp_ToIndustry] FOREIGN KEY([IndustryID])
+REFERENCES [dbo].[Industry] ([ID])
+GO
+ALTER TABLE [dbo].[CustomerTemp] CHECK CONSTRAINT [FK_CustomerTemp_ToIndustry]
+GO
+ALTER TABLE [dbo].[EmailTemplate]  WITH CHECK ADD FOREIGN KEY([Category])
+REFERENCES [dbo].[EmailCategory] ([ID])
+GO
+ALTER TABLE [dbo].[EmailTemplateTemp]  WITH CHECK ADD FOREIGN KEY([Category])
+REFERENCES [dbo].[EmailCategory] ([ID])
+GO
+ALTER TABLE [dbo].[SettlementUploadFileConfiguration]  WITH CHECK ADD  CONSTRAINT [FK_SettlementUploadFileConfiguration_ToCustomer] FOREIGN KEY([CustomerPK])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[SettlementUploadFileConfiguration] CHECK CONSTRAINT [FK_SettlementUploadFileConfiguration_ToCustomer]
+GO
+ALTER TABLE [dbo].[SettlementUploadFileConfigurationField]  WITH CHECK ADD  CONSTRAINT [FK_SettlementUploadFileConfigurationField_ToSettlementConfiguration] FOREIGN KEY([UFCId])
+REFERENCES [dbo].[SettlementUploadFileConfiguration] ([Id])
+GO
+ALTER TABLE [dbo].[SettlementUploadFileConfigurationField] CHECK CONSTRAINT [FK_SettlementUploadFileConfigurationField_ToSettlementConfiguration]
+GO
+ALTER TABLE [dbo].[Tolerance]  WITH NOCHECK ADD  CONSTRAINT [FK_Tolerance_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[Tolerance] CHECK CONSTRAINT [FK_Tolerance_ToCustomer]
+GO
+ALTER TABLE [dbo].[ToleranceClient]  WITH CHECK ADD  CONSTRAINT [FK_ToleranceClient_ToARCounterpart] FOREIGN KEY([ClientPK])
+REFERENCES [dbo].[ARCounterpart] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceClient] CHECK CONSTRAINT [FK_ToleranceClient_ToARCounterpart]
+GO
+ALTER TABLE [dbo].[ToleranceClient]  WITH CHECK ADD  CONSTRAINT [FK_ToleranceClient_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceClient] CHECK CONSTRAINT [FK_ToleranceClient_ToCustomer]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_ToleranceClientTemp_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] CHECK CONSTRAINT [FK_ToleranceClientTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp]  WITH CHECK ADD  CONSTRAINT [FK_ToleranceClientTemp_ToOrigin] FOREIGN KEY([OriginId])
+REFERENCES [dbo].[ToleranceClient] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] CHECK CONSTRAINT [FK_ToleranceClientTemp_ToOrigin]
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp]  WITH CHECK ADD  CONSTRAINT [FK_ToleranceTempClient_ToARCounterpart] FOREIGN KEY([ClientPK])
+REFERENCES [dbo].[ARCounterpart] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceClientTemp] CHECK CONSTRAINT [FK_ToleranceTempClient_ToARCounterpart]
+GO
+ALTER TABLE [dbo].[ToleranceTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_ToleranceTemp_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceTemp] CHECK CONSTRAINT [FK_ToleranceTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[ToleranceTemp]  WITH NOCHECK ADD  CONSTRAINT [FK_ToleranceTemp_ToTolerance] FOREIGN KEY([ToleranceId])
+REFERENCES [dbo].[Tolerance] ([Id])
+GO
+ALTER TABLE [dbo].[ToleranceTemp] CHECK CONSTRAINT [FK_ToleranceTemp_ToTolerance]
+GO
+ALTER TABLE [dbo].[UserPreviousPasswords]  WITH CHECK ADD  CONSTRAINT [FK_dbo.UserPreviousPasswords_dbo.AspNetUsers_UserId] FOREIGN KEY([UserId])
+REFERENCES [dbo].[AspNetUsers] ([Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[UserPreviousPasswords] CHECK CONSTRAINT [FK_dbo.UserPreviousPasswords_dbo.AspNetUsers_UserId]
+GO
+ALTER TABLE [dbo].[VirtualAccount]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccount_ToARCounterpart] FOREIGN KEY([ClientPK])
+REFERENCES [dbo].[ARCounterpart] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccount] CHECK CONSTRAINT [FK_VirtualAccount_ToARCounterpart]
+GO
+ALTER TABLE [dbo].[VirtualAccount]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccount_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccount] CHECK CONSTRAINT [FK_VirtualAccount_ToCustomer]
+GO
+ALTER TABLE [dbo].[VirtualAccount]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccount_ToCustomerBin] FOREIGN KEY([CustomerBinId])
+REFERENCES [dbo].[CustomerBin] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccount] CHECK CONSTRAINT [FK_VirtualAccount_ToCustomerBin]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccountTemp_ToARCounterpart] FOREIGN KEY([ClientPKMaster])
+REFERENCES [dbo].[ARCounterpart] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] CHECK CONSTRAINT [FK_VirtualAccountTemp_ToARCounterpart]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccountTemp_ToARCounterpartTemp] FOREIGN KEY([ClientPK])
+REFERENCES [dbo].[ARCounterpartTemp] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] CHECK CONSTRAINT [FK_VirtualAccountTemp_ToARCounterpartTemp]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccountTemp_ToCustomer] FOREIGN KEY([BrokerId])
+REFERENCES [dbo].[Customer] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] CHECK CONSTRAINT [FK_VirtualAccountTemp_ToCustomer]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccountTemp_ToCustomerBin] FOREIGN KEY([CustomerBinId])
+REFERENCES [dbo].[CustomerBin] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] CHECK CONSTRAINT [FK_VirtualAccountTemp_ToCustomerBin]
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp]  WITH CHECK ADD  CONSTRAINT [FK_VirtualAccountTemp_ToOrigin] FOREIGN KEY([VirtualAccountId])
+REFERENCES [dbo].[VirtualAccount] ([Id])
+GO
+ALTER TABLE [dbo].[VirtualAccountTemp] CHECK CONSTRAINT [FK_VirtualAccountTemp_ToOrigin]
+GO
+USE [master]
+GO
+ALTER DATABASE [MORE2_Master] SET  READ_WRITE 
+GO
+
